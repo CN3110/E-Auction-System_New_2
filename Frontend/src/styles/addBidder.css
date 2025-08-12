@@ -1,0 +1,125 @@
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #1a150b;
+}
+
+.form-group input {
+  padding: 12px;
+  border: 2px solid #e1e8ed;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.3s ease;
+}
+
+.form-group input:focus {
+  border-color: #e5b14c;
+  outline: none;
+}
+
+.form-group.full-width {
+  grid-column: span 2;
+}
+
+/* Bidder List Styles */
+.bidder-list {
+  margin-top: 40px;
+}
+
+.bidder-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.bidder-card {
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.06);
+  position: relative;
+  transition: 0.3s ease;
+}
+
+.bidder-card:hover {
+  transform: translateY(-5px);
+}
+
+.bidder-info h5 {
+  font-size: 1.1rem;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.bidder-id {
+  font-size: 0.9rem;
+  color: #999;
+}
+
+.bidder-company {
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.bidder-contact span {
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.remove-btn {
+  margin-top: 12px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+
+.remove-btn:hover {
+  background: #c82333;
+}
+
+.loading, .error {
+  text-align: center;
+  padding: 20px;
+  font-size: 18px;
+}
+
+.error {
+  color: #ff4444;
+}
+
+.bidder-status .active {
+  color: #00C851;
+  font-weight: bold;
+}
+
+.bidder-status .inactive {
+  color: #ff4444;
+  font-weight: bold;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Toast notifications positioning */
+.Toastify__toast-container {
+  margin-top: 50px;
+}
