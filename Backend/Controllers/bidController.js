@@ -1,4 +1,4 @@
-const { supabaseAdmin } = require('../Config/database');
+const { query } = require('../Config/database');
 const moment = require('moment-timezone');
 
 // Place a bid 
@@ -23,18 +23,19 @@ const placeBid = async (req, res) => {
         }
 
         // Get auction details and validate
-        const { data: auction, error: auctionError } = await supabaseAdmin
-            .from('auctions')
-            .select('*')
-            .eq('id', auction_id)
-            .single();
+        const { data: auctions, error: auctionError } = await query(
+            'SELECT * FROM auctions WHERE id = ?',
+            [auction_id]
+        );
 
-        if (auctionError || !auction) {
+        if (auctionError || !auctions || auctions.length === 0) {
             return res.status(404).json({ 
                 success: false,
                 error: 'Auction not found' 
             });
         }
+
+        const auction = auctions[0];
 
         // Check if auction is live (Sri Lanka time)
         const nowSL = moment().tz('Asia/Colombo');
@@ -49,14 +50,12 @@ const placeBid = async (req, res) => {
         }
 
         // Check if bidder is invited to this auction
-        const { data: invitation, error: inviteError } = await supabaseAdmin
-            .from('auction_bidders')
-            .select('*')
-            .eq('auction_id', auction_id)
-            .eq('bidder_id', bidder_id)
-            .single();
+        const { data: invitations, error: inviteError } = await query(
+            'SELECT * FROM auction_bidders WHERE auction_id = ? AND bidder_id = ?',
+            [auction_id, bidder_id]
+        );
 
-        if (inviteError || !invitation) {
+        if (inviteError || !invitations || invitations.length === 0) {
             return res.status(403).json({ 
                 success: false,
                 error: 'You are not invited to this auction' 
@@ -64,16 +63,10 @@ const placeBid = async (req, res) => {
         }
 
         // Insert the new bid
-        const { data: newBid, error: bidError } = await supabaseAdmin
-            .from('bids')
-            .insert([{
-                auction_id: auction_id,
-                bidder_id: bidder_id,
-                amount: parseFloat(amount),
-                bid_time: nowSL.toISOString()
-            }])
-            .select('*')
-            .single();
+        const { data: bidResult, error: bidError } = await query(
+            'INSERT INTO bids (auction_id, bidder_id, amount, bid_time) VALUES (?, ?, ?, ?)',
+            [auction_id, bidder_id, parseFloat(amount), nowSL.toISOString()]
+        );
 
         if (bidError) {
             console.error('Bid insertion error:', bidError);
@@ -83,24 +76,29 @@ const placeBid = async (req, res) => {
             });
         }
 
+        // Get the created bid
+        const { data: newBids } = await query(
+            'SELECT * FROM bids WHERE auction_id = ? AND bidder_id = ? ORDER BY bid_time DESC LIMIT 1',
+            [auction_id, bidder_id]
+        );
+
+        const newBid = newBids[0];
+
         // Get current rank after placing bid
         const rank = await getBidderCurrentRank(auction_id, bidder_id);
 
         // Get current lowest bid for the auction
-        const { data: lowestBid } = await supabaseAdmin
-            .from('bids')
-            .select('amount')
-            .eq('auction_id', auction_id)
-            .order('amount', { ascending: true })
-            .limit(1)
-            .single();
+        const { data: lowestBids } = await query(
+            'SELECT amount FROM bids WHERE auction_id = ? ORDER BY amount ASC LIMIT 1',
+            [auction_id]
+        );
 
         res.status(201).json({
             success: true,
             message: 'Bid placed successfully',
             bid: newBid,
             rank: rank,
-            currentLowest: lowestBid?.amount || parseFloat(amount)
+            currentLowest: lowestBids?.[0]?.amount || parseFloat(amount)
         });
 
     } catch (error) {
@@ -116,11 +114,10 @@ const placeBid = async (req, res) => {
 const getBidderCurrentRank = async (auctionId, bidderId) => {
     try {
         // Get all unique bidders' lowest bids for this auction
-        const { data: allBids, error } = await supabaseAdmin
-            .from('bids')
-            .select('bidder_id, amount')
-            .eq('auction_id', auctionId)
-            .order('amount', { ascending: true });
+        const { data: allBids, error } = await query(
+            'SELECT bidder_id, amount FROM bids WHERE auction_id = ? ORDER BY amount ASC',
+            [auctionId]
+        );
 
         if (error || !allBids) return null;
 
@@ -159,16 +156,12 @@ const getLatestBid = async (req, res) => {
             });
         }
 
-        const { data: bid, error } = await supabaseAdmin
-            .from('bids')
-            .select('*')
-            .eq('auction_id', auction_id)
-            .eq('bidder_id', bidderId)
-            .order('bid_time', { ascending: false })
-            .limit(1)
-            .single();
+        const { data: bids, error } = await query(
+            'SELECT * FROM bids WHERE auction_id = ? AND bidder_id = ? ORDER BY bid_time DESC LIMIT 1',
+            [auction_id, bidderId]
+        );
 
-        if (error && error.code !== 'PGRST116') {
+        if (error) {
             console.error('Get latest bid error:', error);
             return res.status(500).json({
                 success: false,
@@ -178,7 +171,7 @@ const getLatestBid = async (req, res) => {
 
         res.json({
             success: true,
-            bid: bid || null
+            bid: bids && bids.length > 0 ? bids[0] : null
         });
 
     } catch (error) {
@@ -206,17 +199,15 @@ const getBidderRank = async (req, res) => {
         const rank = await getBidderCurrentRank(auction_id, bidderId);
 
         // Get total number of bidders who have placed bids
-        const { data: totalBidders } = await supabaseAdmin
-            .from('bids')
-            .select('bidder_id')
-            .eq('auction_id', auction_id);
-
-        const uniqueBidders = [...new Set(totalBidders?.map(b => b.bidder_id) || [])];
+        const { data: totalBidders } = await query(
+            'SELECT DISTINCT bidder_id FROM bids WHERE auction_id = ?',
+            [auction_id]
+        );
 
         res.json({
             success: true,
             rank: rank,
-            totalBidders: uniqueBidders.length
+            totalBidders: totalBidders?.length || 0
         });
 
     } catch (error) {
@@ -233,14 +224,13 @@ const getAuctionBids = async (req, res) => {
     try {
         const { auctionId } = req.params;
 
-        const { data: bids, error } = await supabaseAdmin
-            .from('bids')
-            .select(`
-                *,
-                users(name, company, user_id)
-            `)
-            .eq('auction_id', auctionId)
-            .order('bid_time', { ascending: false });
+        const { data: bids, error } = await query(`
+            SELECT b.*, u.name, u.company, u.user_id
+            FROM bids b
+            JOIN users u ON b.bidder_id = u.id
+            WHERE b.auction_id = ?
+            ORDER BY b.bid_time DESC
+        `, [auctionId]);
 
         if (error) {
             console.error('Get auction bids error:', error);
@@ -264,8 +254,7 @@ const getAuctionBids = async (req, res) => {
     }
 };
 
-// Updated getBidderHistory function for bidController.js
-
+// Get bidder's auction history
 const getBidderHistory = async (req, res) => {
     try {
         const bidderId = req.user.id;
@@ -273,24 +262,15 @@ const getBidderHistory = async (req, res) => {
         const offset = (parseInt(page) - 1) * parseInt(limit);
 
         // Get bidder's auction history - LATEST bid per auction (not lowest)
-        const { data: history, error } = await supabaseAdmin
-            .from('bids')
-            .select(`
-                auction_id,
-                amount,
-                bid_time,
-                auctions(
-                    id,
-                    auction_id,
-                    title, 
-                    auction_date, 
-                    start_time,
-                    duration_minutes,
-                    status
-                )
-            `)
-            .eq('bidder_id', bidderId)
-            .order('bid_time', { ascending: false });
+        const { data: history, error } = await query(`
+            SELECT b.auction_id, b.amount, b.bid_time,
+                   a.id, a.auction_id as auction_code, a.title, a.auction_date, 
+                   a.start_time, a.duration_minutes, a.status
+            FROM bids b
+            JOIN auctions a ON b.auction_id = a.id
+            WHERE b.bidder_id = ?
+            ORDER BY b.bid_time DESC
+        `, [bidderId]);
 
         if (error) {
             console.error('Get bidder history error:', error);
@@ -305,7 +285,18 @@ const getBidderHistory = async (req, res) => {
         history.forEach(bid => {
             const auctionId = bid.auction_id;
             if (!auctionMap[auctionId] || new Date(bid.bid_time) > new Date(auctionMap[auctionId].bid_time)) {
-                auctionMap[auctionId] = bid;
+                auctionMap[auctionId] = {
+                    ...bid,
+                    auctions: {
+                        id: bid.id,
+                        auction_id: bid.auction_code,
+                        title: bid.title,
+                        auction_date: bid.auction_date,
+                        start_time: bid.start_time,
+                        duration_minutes: bid.duration_minutes,
+                        status: bid.status
+                    }
+                };
             }
         });
 
@@ -335,7 +326,7 @@ const getBidderHistory = async (req, res) => {
                     
                     if (auction.status === 'cancelled') {
                         result = 'Cancelled';
-                    } else if (now < auctionEnd && auction.status !== 'completed') {
+                    } else if (now < auctionEnd && auction.status !== 'ended') {
                         result = 'In Progress';
                     } else {
                         // Auction has ended, determine if bidder's LAST bid was the winning bid
@@ -398,11 +389,10 @@ const getBidderHistory = async (req, res) => {
 const determineLastBidResult = async (auctionId, bidderId, bidderLastBidAmount) => {
     try {
         // Get ALL final bids from all bidders in this auction
-        const { data: allBids, error } = await supabaseAdmin
-            .from('bids')
-            .select('bidder_id, amount, bid_time')
-            .eq('auction_id', auctionId)
-            .order('bid_time', { ascending: false });
+        const { data: allBids, error } = await query(
+            'SELECT bidder_id, amount, bid_time FROM bids WHERE auction_id = ? ORDER BY bid_time DESC',
+            [auctionId]
+        );
 
         if (error || !allBids?.length) {
             return 'No Bids';

@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { supabaseAdmin } = require('../Config/database'); // Use admin client for database operations
+const { query } = require('../Config/database');
 
 // Hardcoded admin credentials
 const ADMIN_CREDENTIALS = {
@@ -52,25 +52,23 @@ const login = async (req, res) => {
 
     console.log('Bidder login attempt for:', user_id.toUpperCase());
 
-    // Find bidder in database using admin client
-    const { data: user, error } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .eq('user_id', user_id.toUpperCase())
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .single();
+    // Find bidder in database
+    const { data: users, error } = await query(
+      'SELECT * FROM users WHERE user_id = ? AND is_active = TRUE AND deleted_at IS NULL',
+      [user_id.toUpperCase()]
+    );
 
     if (error) {
       console.log('Database error:', error);
       return res.status(401).json({ success: false, error: 'Invalid credentials' });
     }
 
-    if (!user) {
+    if (!users || users.length === 0) {
       console.log('User not found:', user_id.toUpperCase());
       return res.status(401).json({ success: false, error: 'Invalid credentials' });
     }
 
+    const user = users[0];
     console.log('User found:', user.user_id);
 
     // Check password
@@ -117,14 +115,19 @@ const changePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     const userId = req.user.id;
 
-    // Get user from database using admin client
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('password_hash')
-      .eq('id', userId)
-      .single();
+    // Get user from database
+    const { data: users, error: userError } = await query(
+      'SELECT password_hash FROM users WHERE id = ?',
+      [userId]
+    );
 
     if (userError) throw userError;
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const user = users[0];
 
     // Verify current password
     const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
@@ -135,14 +138,11 @@ const changePassword = async (req, res) => {
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password using admin client
-    const { error: updateError } = await supabaseAdmin
-      .from('users')
-      .update({ 
-        password_hash: hashedPassword,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', userId);
+    // Update password
+    const { error: updateError } = await query(
+      'UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?',
+      [hashedPassword, userId]
+    );
 
     if (updateError) throw updateError;
 

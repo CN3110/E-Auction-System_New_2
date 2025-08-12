@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { supabaseAdmin } = require('../Config/database');
+const { query } = require('../Config/database');
 
 const authenticate = async (req, res, next) => {
   try {
@@ -26,20 +26,17 @@ const authenticate = async (req, res, next) => {
     }
 
     // Handle bidder authentication (database lookup)
-    const { data: user, error } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .eq('id', decoded.id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .single();
+    const { data: users, error } = await query(
+      'SELECT * FROM users WHERE id = ? AND is_active = TRUE AND deleted_at IS NULL',
+      [decoded.id]
+    );
 
-    if (error || !user) {
+    if (error || !users || users.length === 0) {
       console.log('User authentication failed:', error || 'User not found');
       throw new Error('User not found or inactive');
     }
 
-    req.user = user;
+    req.user = users[0];
     next();
   } catch (error) {
     console.error('Authentication error:', error.message);

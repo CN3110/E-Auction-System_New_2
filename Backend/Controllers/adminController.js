@@ -1,4 +1,4 @@
-const { supabaseAdmin } = require('../Config/database');
+const { query, transaction } = require('../Config/database');
 const bcrypt = require('bcryptjs');
 const { sendEmail } = require('../Config/email');
 const { generateBidderId, generatePassword } = require('../Utils/generators');
@@ -25,31 +25,26 @@ const registerBidder = async (req, res) => {
     }
 
     // Check if email already exists
-    const { data: existingUser, error: existingUserError } = await supabaseAdmin
-      .from('users')
-      .select('user_id')
-      .eq('email', email)
-      .maybeSingle();
+    const { data: existingUser, error: existingUserError } = await query(
+      'SELECT id FROM users WHERE email = ?',
+      [email]
+    );
 
     if (existingUserError) throw existingUserError;
-    if (existingUser) {
+    if (existingUser && existingUser.length > 0) {
       return res.status(409).json({ 
         success: false, 
         error: 'Email already registered' 
       });
     }
 
-    // Get last bidder ID - more robust query
-    const { data: lastBidder, error: lastBidderError } = await supabaseAdmin
-      .from('users')
-      .select('user_id')
-      .ilike('user_id', 'B%') // Only get bidder IDs (starting with B)
-      .order('user_id', { ascending: false })
-      .limit(1);
+    // Get last bidder ID
+    const { data: lastBidder, error: lastBidderError } = await query(
+      'SELECT user_id FROM users WHERE user_id LIKE "B%" ORDER BY user_id DESC LIMIT 1'
+    );
     
     if (lastBidderError) throw lastBidderError;
     
-    // Handle case where no bidders exist yet
     const lastBidderId = lastBidder && lastBidder[0]?.user_id;
     const bidderId = generateBidderId(lastBidderId);
     
@@ -65,25 +60,16 @@ const registerBidder = async (req, res) => {
       bidderId, email, name, company, phone
     });
 
-    // Insert new bidder with transaction for safety
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .insert([{
-        user_id: bidderId,
-        email,
-        password_hash: hashedPassword,
-        role: 'bidder',
-        name,
-        company,
-        phone: phone || null,
-        is_active: true
-      }])
-      .select();
+    // Insert new bidder
+    const { data, error } = await query(
+      `INSERT INTO users (user_id, email, password_hash, role, name, company, phone, is_active) 
+       VALUES (?, ?, ?, 'bidder', ?, ?, ?, TRUE)`,
+      [bidderId, email, hashedPassword, name, company, phone || null]
+    );
     
     if (error) {
-      console.error('Supabase insert error:', error);
-      // Handle specific constraint violation
-      if (error.code === '23505') {
+      console.error('MySQL insert error:', error);
+      if (error.code === 'ER_DUP_ENTRY') {
         return res.status(409).json({ 
           success: false, 
           error: 'Bidder ID already exists. Please try again.' 
@@ -92,7 +78,13 @@ const registerBidder = async (req, res) => {
       throw error;
     }
 
-    console.log('Bidder created successfully:', data[0]);
+    // Get the created bidder
+    const { data: createdBidder } = await query(
+      'SELECT * FROM users WHERE user_id = ?',
+      [bidderId]
+    );
+
+    console.log('Bidder created successfully:', createdBidder[0]);
     
     // Send email with credentials (wrapped in try-catch)
     try {
@@ -123,7 +115,7 @@ const registerBidder = async (req, res) => {
     return res.json({
       success: true,
       message: 'Bidder registered successfully',
-      bidder: data[0],
+      bidder: createdBidder[0],
       temporaryPassword: process.env.NODE_ENV === 'development' ? password : undefined
     });
     
@@ -139,12 +131,9 @@ const registerBidder = async (req, res) => {
 
 const getBidders = async (req, res) => {
   try {
-    // Use supabaseAdmin (the properly imported client)
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .eq('role', 'bidder')
-      .order('created_at', { ascending: false });
+    const { data, error } = await query(
+      'SELECT * FROM users WHERE role = "bidder" ORDER BY created_at DESC'
+    );
 
     if (error) throw error;
     
@@ -166,15 +155,20 @@ const updateBidderStatus = async (req, res) => {
     const { bidderId } = req.params;
     const { is_active } = req.body;
     
-    const { data, error } = await supabase
-      .from('users')
-      .update({ is_active })
-      .eq('user_id', bidderId)
-      .select();
+    const { data, error } = await query(
+      'UPDATE users SET is_active = ? WHERE user_id = ?',
+      [is_active, bidderId]
+    );
     
     if (error) throw error;
     
-    res.json({ success: true, bidder: data[0] });
+    // Get updated bidder
+    const { data: updatedBidder } = await query(
+      'SELECT * FROM users WHERE user_id = ?',
+      [bidderId]
+    );
+    
+    res.json({ success: true, bidder: updatedBidder[0] });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -185,14 +179,12 @@ const deactivateBidder = async (req, res) => {
     const { bidderId } = req.params;
 
     // First verify bidder exists and is active
-    const { data: bidder, error: findError } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .eq('user_id', bidderId)
-      .is('deleted_at', null)
-      .single();
+    const { data: bidder, error: findError } = await query(
+      'SELECT * FROM users WHERE user_id = ? AND deleted_at IS NULL',
+      [bidderId]
+    );
 
-    if (findError || !bidder) {
+    if (findError || !bidder || bidder.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Bidder not found or already deactivated'
@@ -200,14 +192,10 @@ const deactivateBidder = async (req, res) => {
     }
 
     // Perform deactivation
-    const { error } = await supabaseAdmin
-      .from('users')
-      .update({
-        deleted_at: new Date().toISOString(),
-        is_active: false,
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', bidderId);
+    const { error } = await query(
+      'UPDATE users SET deleted_at = NOW(), is_active = FALSE, updated_at = NOW() WHERE user_id = ?',
+      [bidderId]
+    );
 
     if (error) throw error;
 
@@ -233,14 +221,12 @@ const reactivateBidder = async (req, res) => {
     const { bidderId } = req.params;
 
     // Verify bidder exists and is deactivated
-    const { data: bidder, error: findError } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .eq('user_id', bidderId)
-      .not('deleted_at', 'is', null)
-      .single();
+    const { data: bidder, error: findError } = await query(
+      'SELECT * FROM users WHERE user_id = ? AND deleted_at IS NOT NULL',
+      [bidderId]
+    );
 
-    if (findError || !bidder) {
+    if (findError || !bidder || bidder.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Bidder not found or already active'
@@ -248,14 +234,10 @@ const reactivateBidder = async (req, res) => {
     }
 
     // Perform reactivation
-    const { error } = await supabaseAdmin
-      .from('users')
-      .update({
-        deleted_at: null,
-        is_active: true,
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', bidderId);
+    const { error } = await query(
+      'UPDATE users SET deleted_at = NULL, is_active = TRUE, updated_at = NOW() WHERE user_id = ?',
+      [bidderId]
+    );
 
     if (error) throw error;
 
@@ -275,16 +257,12 @@ const reactivateBidder = async (req, res) => {
   }
 };
 
-// Get active bidders for auction creation - when selecting only active bidders
+// Get active bidders for auction creation
 const getActiveBidders = async (req, res) => {
   try {
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .eq('role', 'bidder')
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
+    const { data, error } = await query(
+      'SELECT * FROM users WHERE role = "bidder" AND is_active = TRUE AND deleted_at IS NULL ORDER BY created_at DESC'
+    );
 
     if (error) throw error;
     
@@ -301,14 +279,9 @@ const getActiveBidders = async (req, res) => {
   }
 };
 
-
 const testDbConnection = async (req, res) => {
   try {
-    // Test with a simple query
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .limit(1);
+    const { data, error } = await query('SELECT * FROM users LIMIT 1');
     
     if (error) throw error;
     

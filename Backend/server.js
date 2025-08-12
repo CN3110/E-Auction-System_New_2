@@ -5,7 +5,6 @@ const cors = require('cors');
 require('dotenv').config();
 const { testConnection } = require('./Config/database');
 
-
 // Test DB connection on startup
 testConnection().then(success => {
   if (!success) {
@@ -14,7 +13,6 @@ testConnection().then(success => {
   }
   console.log("✅ Database connection verified");
 });
-
 
 const app = express();
 const server = http.createServer(app);
@@ -41,7 +39,6 @@ console.log("Admin routes path:", require.resolve('./Routes/admin'));
 const adminRouter = require('./Routes/admin');
 app.use('/api/admin', adminRouter);
 console.log("Registered admin routes:");
-console.log(adminRouter.stack);
 
 // Real-time handling
 io.on('connection', (socket) => {
@@ -61,21 +58,19 @@ io.on('connection', (socket) => {
   });
 });
 
-// Test route - Add this before server.listen()
+// Test route
 app.get('/api/test-route', (req, res) => {
   console.log("Test route was hit!");
   res.json({ message: "Backend is working!" });
 });
-
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Add this to your server.js file
-
-const { supabaseAdmin } = require('./Config/database');
+// Real-time ranking updates for MySQL
+const { query } = require('./Config/database');
 const moment = require('moment-timezone');
 
 // Function to update rankings for all live auctions
@@ -84,9 +79,9 @@ const updateLiveAuctionRankings = async () => {
     const nowSL = moment().tz('Asia/Colombo');
     
     // Get all live auctions
-    const { data: auctions, error } = await supabaseAdmin
-      .from('auctions')
-      .select('id, auction_date, start_time, duration_minutes');
+    const { data: auctions, error } = await query(
+      'SELECT id, auction_date, start_time, duration_minutes FROM auctions'
+    );
     
     if (error) {
       console.error('Error fetching auctions for ranking update:', error);
@@ -98,8 +93,6 @@ const updateLiveAuctionRankings = async () => {
       const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
       return nowSL.isBetween(startDateTime, endDateTime);
     });
-    
-    //console.log(`Updating rankings for ${liveAuctions.length} live auctions`);
     
     // Update rankings for each live auction
     for (const auction of liveAuctions) {
@@ -115,11 +108,10 @@ const updateLiveAuctionRankings = async () => {
 const updateAuctionRankings = async (auctionId) => {
   try {
     // Get all bids for this auction
-    const { data: allBids, error } = await supabaseAdmin
-      .from('bids')
-      .select('id, bidder_id, amount')
-      .eq('auction_id', auctionId)
-      .order('amount', { ascending: true });
+    const { data: allBids, error } = await query(
+      'SELECT id, bidder_id, amount FROM bids WHERE auction_id = ? ORDER BY amount ASC',
+      [auctionId]
+    );
     
     if (error) {
       console.error(`Error fetching bids for auction ${auctionId}:`, error);
@@ -141,8 +133,7 @@ const updateAuctionRankings = async (auctionId) => {
     const sortedBidders = Object.entries(bidderLowestBids)
       .sort(([, bidA], [, bidB]) => bidA.amount - bidB.amount);
     
-    // Update rankings (you might want to store this in a rankings table)
-    // For now, we'll emit socket events to update clients
+    // Update rankings - emit socket events to update clients
     sortedBidders.forEach(([bidderId, bidInfo], index) => {
       const rank = index + 1;
       
@@ -174,7 +165,7 @@ const startRankingScheduler = () => {
   setInterval(updateLiveAuctionRankings, 60000); // 60 seconds
 };
 
-// Add this to your server.js after creating the server
+// Start the scheduler after creating the server
 startRankingScheduler();
 
 // Export for use in other files
