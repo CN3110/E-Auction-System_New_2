@@ -15,7 +15,7 @@ const { authenticate } = require('../Middleware/auth');
 router.post('/create', createAuction);
 
 // Get all auctions for admin with filters and pagination
-router.get('/', authenticateToken, getAllAuctionsAdmin);
+router.get('/', getAllAuctionsAdmin);
 
 // Get live auction for logged bidder
 router.get('/bidder/live', authenticate, requireBidder, getLiveAuction);

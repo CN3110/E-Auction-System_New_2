@@ -72,6 +72,8 @@ export const getAllAuctions = async () => {
 
 
 
+
+
 // Add more auction-related services as needed
 export default {
   fetchActiveBidders,

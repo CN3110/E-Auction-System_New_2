@@ -68,9 +68,27 @@ const CreateAuction = () => {
     try {
       setAuctionsLoading(true);
       const data = await getAllAuctions();
-      setCreatedAuctions(data.auctions || []);
+      
+      // Transform the API data to match frontend expectations
+      const transformedAuctions = data.auctions.map(auction => {
+        const [date, time] = auction.DateTime ? auction.DateTime.split(' ') : ['', ''];
+        return {
+          id: auction.AuctionID, // Added id for React key
+          auction_id: auction.AuctionID,
+          title: auction.Title,
+          auction_date: date,
+          start_time: time,
+          duration_minutes: parseInt(auction.Duration) || 0,
+          special_notices: auction.SpecialNotices || '-',
+          auction_bidders: auction.InvitedBidders ? auction.InvitedBidders.split(', ') : [],
+          status: auction.Status ? auction.Status.toLowerCase() : 'ended'
+        };
+      });
+      
+      setCreatedAuctions(transformedAuctions || []);
     } catch (error) {
       console.error('Failed to fetch created auctions:', error);
+      setCreatedAuctions([]);
     } finally {
       setAuctionsLoading(false);
     }
@@ -155,7 +173,6 @@ const CreateAuction = () => {
       });
       setSearchTerm('');
       
-      // Reload the created auctions list
       await loadCreatedAuctions();
       
     } catch (error) {
@@ -166,37 +183,45 @@ const CreateAuction = () => {
   };
 
   const getAuctionStatus = (auction) => {
-    const now = new Date();
-    const auctionDateTime = new Date(`${auction.auction_date}T${auction.start_time}`);
-    const endDateTime = new Date(auctionDateTime.getTime() + (auction.duration_minutes * 60000));
-    
     if (auction.status === 'cancelled') {
       return { status: 'Cancelled', color: 'error' };
-    } else if (auction.status === 'completed') {
-      return { status: 'Completed', color: 'success' };
-    } else if (now < auctionDateTime) {
-      return { status: 'Scheduled', color: 'info' };
-    } else if (now >= auctionDateTime && now <= endDateTime) {
-      return { status: 'Live', color: 'warning' };
-    } else {
-      return { status: 'Ended', color: 'default' };
     }
+    if (auction.status === 'completed') {
+      return { status: 'Completed', color: 'success' };
+    }
+    if (auction.status === 'scheduled') {
+      return { status: 'Scheduled', color: 'info' };
+    }
+    if (auction.status === 'live') {
+      return { status: 'Live', color: 'warning' };
+    }
+    return { status: 'Ended', color: 'default' };
   };
 
   const formatDate = (dateStr) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    if (!dateStr) return 'Invalid Date';
+    try {
+      return new Date(dateStr).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (e) {
+      return 'Invalid Date';
+    }
   };
 
   const formatTime = (timeStr) => {
-    return new Date(`2000-01-01T${timeStr}`).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
+    if (!timeStr) return 'Invalid Time';
+    try {
+      return new Date(`2000-01-01T${timeStr}`).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (e) {
+      return 'Invalid Time';
+    }
   };
 
   if (biddersLoading) {
@@ -225,7 +250,6 @@ const CreateAuction = () => {
         )}
 
         <form onSubmit={handleSubmit}>
-          
           <div className="row mb-3">
             <div className="col-md-6">
               <TextField
@@ -250,7 +274,7 @@ const CreateAuction = () => {
                 required
                 disabled={loading}
                 inputProps={{
-                  min: new Date().toISOString().split('T')[0] // Prevent past dates
+                  min: new Date().toISOString().split('T')[0]
                 }}
               />
             </div>
@@ -398,9 +422,9 @@ const CreateAuction = () => {
                     <TableCell><strong>Date</strong></TableCell>
                     <TableCell><strong>Time</strong></TableCell>
                     <TableCell><strong>Duration</strong></TableCell>
-                    <TableCell><strong>Special Notices</strong></TableCell>
-                    <TableCell><strong>Invited Bidders</strong></TableCell>
-                    <TableCell><strong>Status</strong></TableCell>
+                    
+<TableCell><strong>Invited Bidders</strong></TableCell>
+                    
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -433,32 +457,15 @@ const CreateAuction = () => {
                             {auction.duration_minutes} mins
                           </Typography>
                         </TableCell>
+                        
                         <TableCell>
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
-                              maxWidth: 200, 
-                              overflow: 'hidden', 
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}
-                            title={auction.special_notices}
-                          >
-                            {auction.special_notices || '-'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" color="primary">
-                            {auction.auction_bidders?.length || 0} bidders
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={statusInfo.status}
-                            color={statusInfo.color}
-                            size="small"
-                          />
-                        </TableCell>
+  <Typography variant="body2" color="primary">
+    {auction.auction_bidders?.length > 0 
+      ? auction.auction_bidders.join(', ')
+      : 'No bidders'}
+  </Typography>
+</TableCell>
+                        
                       </TableRow>
                     );
                   })}

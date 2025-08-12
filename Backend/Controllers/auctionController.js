@@ -543,205 +543,58 @@ const getAuctionResults = async (req, res) => {
   }
 };
 
+
 const getAllAuctionsAdmin = async (req, res) => {
-  try {
-    const { status, date, from_date, to_date, title, page = 1, limit = 20 } = req.query;
-    
-    // Parse and validate pagination parameters
-    const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.max(1, Math.min(100, parseInt(limit) || 20)); // Cap at 100
-    const offset = Math.max(0, (pageNum - 1) * limitNum);
+    try {
+        // Get all auctions with invited bidders' names
+        const { data: auctions, error } = await query(`
+            SELECT 
+                a.auction_id AS AuctionID,
+                a.title AS Title,
+                CONCAT(a.auction_date, ' ', a.start_time) AS DateTime,
+                a.duration_minutes AS Duration,
+                a.status AS Status,
+                GROUP_CONCAT(u.name SEPARATOR ', ') AS InvitedBidders
+            FROM 
+                auctions a
+            LEFT JOIN 
+                auction_bidders ab ON a.id = ab.auction_id
+            LEFT JOIN 
+                users u ON ab.bidder_id = u.id
+            GROUP BY 
+                a.id
+            ORDER BY 
+                a.auction_date DESC, a.start_time DESC
+        `);
 
-    // Build the base query
-    let whereConditions = [];
-    let queryParams = [];
-
-    // Apply filters
-    if (status) {
-      if (status === 'live') {
-        // Special case for live auctions - we'll handle this in the application logic
-        whereConditions.push('(status = ? OR status = ?)');
-        queryParams.push('scheduled', 'live');
-      } else {
-        whereConditions.push('status = ?');
-        queryParams.push(status);
-      }
-    }
-
-    if (date) {
-      whereConditions.push('auction_date = ?');
-      queryParams.push(date);
-    } else if (from_date || to_date) {
-      if (from_date && to_date) {
-        whereConditions.push('auction_date >= ? AND auction_date <= ?');
-        queryParams.push(from_date, to_date);
-      } else if (from_date) {
-        whereConditions.push('auction_date >= ?');
-        queryParams.push(from_date);
-      } else if (to_date) {
-        whereConditions.push('auction_date <= ?');
-        queryParams.push(to_date);
-      }
-    }
-
-    if (title) {
-      whereConditions.push('title LIKE ?');
-      queryParams.push(`%${title}%`);
-    }
-
-    const whereClause = whereConditions.length > 0 
-      ? `WHERE ${whereConditions.join(' AND ')}` 
-      : '';
-
-    // Count query for pagination
-    const countQuery = `
-      SELECT COUNT(*) as total
-      FROM auctions a
-      ${whereClause}
-    `;
-
-    // Main query with aggregated data
-    const mainQuery = `
-      SELECT a.*,
-        COUNT(DISTINCT ab.bidder_id) as bidder_count,
-        COUNT(DISTINCT b.id) as bid_count,
-        CASE 
-          WHEN COUNT(DISTINCT b.id) > 0 THEN TRUE 
-          ELSE FALSE 
-        END as has_bids
-      FROM auctions a
-      LEFT JOIN auction_bidders ab ON a.id = ab.auction_id
-      LEFT JOIN bids b ON a.id = b.auction_id
-      ${whereClause}
-      GROUP BY a.id 
-      ORDER BY a.auction_date DESC 
-      LIMIT ? OFFSET ?
-    `;
-
-    // Execute count query
-    const { query: dbQuery } = require('../Config/database');
-    const [countResult] = await dbQuery(countQuery, queryParams);
-    const totalCount = countResult[0]?.total || 0;
-
-    // Execute main query with pagination parameters
-    const mainQueryParams = [...queryParams, limitNum, offset];
-    const [auctions] = await dbQuery(mainQuery, mainQueryParams);
-
-    // If no auctions found, return empty result
-    if (!auctions || auctions.length === 0) {
-      return res.json({
-        success: true,
-        auctions: [],
-        pagination: {
-          total: totalCount,
-          page: pageNum,
-          limit: limitNum,
-          total_pages: Math.ceil(totalCount / limitNum)
+        if (error) {
+            console.error('Error fetching auctions:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Failed to fetch auctions'
+            });
         }
-      });
+
+        res.status(200).json({
+            success: true,
+            auctions: auctions.map(auction => ({
+                AuctionID: auction.AuctionID,
+                Title: auction.Title,
+                DateTime: auction.DateTime,
+                Duration: `${auction.Duration} minutes`,
+                Status: auction.Status.charAt(0).toUpperCase() + auction.Status.slice(1), // Capitalize status
+                InvitedBidders: auction.InvitedBidders || 'No bidders invited'
+            }))
+        });
+    } catch (error) {
+        console.error('Error fetching auctions:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error'
+        });
     }
-
-    // Get bidder details for each auction
-    const auctionIds = auctions.map(auction => auction.id);
-    const biddersQuery = `
-      SELECT 
-        ab.auction_id,
-        ab.bidder_id,
-        u.id,
-        u.name,
-        u.company,
-        u.user_id
-      FROM auction_bidders ab
-      JOIN users u ON ab.bidder_id = u.id
-      WHERE ab.auction_id IN (${auctionIds.map(() => '?').join(',')})
-    `;
-
-    const [bidders] = await dbQuery(biddersQuery, auctionIds);
-
-    // Group bidders by auction_id
-    const biddersByAuction = bidders.reduce((acc, bidder) => {
-      if (!acc[bidder.auction_id]) {
-        acc[bidder.auction_id] = [];
-      }
-      acc[bidder.auction_id].push({
-        bidder_id: bidder.bidder_id,
-        users: {
-          id: bidder.id,
-          name: bidder.name,
-          company: bidder.company,
-          user_id: bidder.user_id
-        }
-      });
-      return acc;
-    }, {});
-
-    // Get bid details for each auction
-    const bidsQuery = `
-      SELECT 
-        auction_id,
-        amount,
-        bid_time,
-        bidder_id
-      FROM bids
-      WHERE auction_id IN (${auctionIds.map(() => '?').join(',')})
-      ORDER BY bid_time DESC
-    `;
-
-    const [bids] = await dbQuery(bidsQuery, auctionIds);
-
-    // Group bids by auction_id
-    const bidsByAuction = bids.reduce((acc, bid) => {
-      if (!acc[bid.auction_id]) {
-        acc[bid.auction_id] = [];
-      }
-      acc[bid.auction_id].push(bid);
-      return acc;
-    }, {});
-
-    // Enhance auctions with related data and calculated status
-    const nowSL = moment().tz('Asia/Colombo');
-    const enhancedAuctions = auctions.map(auction => {
-      const startDateTime = moment.tz(
-        `${auction.auction_date} ${auction.start_time}`,
-        'YYYY-MM-DD HH:mm:ss',
-        'Asia/Colombo'
-      );
-      const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
-      
-      let calculatedStatus = auction.status;
-      if (auction.status === 'scheduled' && nowSL.isAfter(startDateTime)) {
-        calculatedStatus = nowSL.isBefore(endDateTime) ? 'live' : 'completed';
-      }
-
-      return {
-        ...auction,
-        calculated_status: calculatedStatus,
-        auction_bidders: biddersByAuction[auction.id] || [],
-        bids: bidsByAuction[auction.id] || [],
-        bidder_count: parseInt(auction.bidder_count) || 0,
-        has_bids: auction.has_bids === 1 || auction.has_bids === true
-      };
-    });
-
-    res.json({
-      success: true,
-      auctions: enhancedAuctions,
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        total_pages: Math.ceil(totalCount / limitNum)
-      }
-    });
-
-  } catch (error) {
-    console.error('Get all auctions error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
 };
+
 
 module.exports = {
   createAuction,
