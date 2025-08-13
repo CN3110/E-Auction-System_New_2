@@ -14,7 +14,7 @@ const isAuctionLive = (auction) => {
   const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
   const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
   
-  return nowSL.isBetween(startDateTime, endDateTime, null, '[]'); // inclusive of start and end
+  return nowSL.isBetween(startDateTime, endDateTime, null, '[]');
 };
 
 // Helper function to get auction status
@@ -24,7 +24,7 @@ const getAuctionStatus = (auction) => {
   const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
   
   if (nowSL.isBefore(startDateTime)) {
-    return 'scheduled';
+    return 'pending'; // Changed to match your database schema
   } else if (nowSL.isBetween(startDateTime, endDateTime, null, '[]')) {
     return 'live';
   } else {
@@ -34,6 +34,19 @@ const getAuctionStatus = (auction) => {
 
 const createAuction = async (req, res) => {
   try {
+    console.log('Create auction request received');
+    console.log('Request user:', req.user);
+    console.log('Request body:', req.body);
+
+    // Check if user is authenticated
+    if (!req.user || !req.user.id) {
+      console.log('Authentication failed - no user or user ID');
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Authentication required. User not found in request.' 
+      });
+    }
+
     const { 
       title, 
       auction_date, 
@@ -56,7 +69,7 @@ const createAuction = async (req, res) => {
     }
 
     // Validate SBU is one of the allowed values
-    const allowedSBUs = ['SBU1', 'SBU2', 'SBU3', 'SBU4']; // Add your actual SBUs here
+    const allowedSBUs = ['SBU1', 'SBU2', 'SBU3', 'SBU4'];
     if (!allowedSBUs.includes(sbu)) {
       return res.status(400).json({
         success: false,
@@ -82,23 +95,51 @@ const createAuction = async (req, res) => {
       });
     }
 
+    // Validate selected bidders exist
+    console.log('Validating selected bidders:', selected_bidders);
+    const { data: validBidders, error: biddersValidationError } = await query(
+      `SELECT id FROM users WHERE id IN (${selected_bidders.map(() => '?').join(',')}) AND role = 'bidder' AND is_active = TRUE`,
+      selected_bidders
+    );
+    
+    if (biddersValidationError) {
+      console.error('Error validating bidders:', biddersValidationError);
+      return res.status(400).json({
+        success: false,
+        error: 'Error validating selected bidders'
+      });
+    }
+
+    if (!validBidders || validBidders.length !== selected_bidders.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'One or more selected bidders are invalid or inactive'
+      });
+    }
+
     // Get last auction ID
     const { data: lastAuction, error: lastAuctionError } = await query(
       'SELECT auction_id FROM auctions ORDER BY auction_id DESC LIMIT 1'
     );
     
-    if (lastAuctionError) throw lastAuctionError;
+    if (lastAuctionError) {
+      console.error('Error fetching last auction ID:', lastAuctionError);
+      throw lastAuctionError;
+    }
     
     const auctionId = generateAuctionId(lastAuction?.[0]?.auction_id);
+    console.log('Generated auction ID:', auctionId);
     
     // Create auction with transaction
     const result = await transaction(async (connection) => {
-      // Insert auction with proper status
+      // Insert auction - Updated to match your database schema
       const initialStatus = getAuctionStatus({ 
         auction_date, 
         start_time, 
         duration_minutes 
       });
+      
+      console.log('Inserting auction with status:', initialStatus);
       
       const [auctionResult] = await connection.execute(
         `INSERT INTO auctions (
@@ -111,42 +152,46 @@ const createAuction = async (req, res) => {
           status,
           category,
           sbu,
-          created_by_name,
           created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           auctionId, 
           title, 
           auction_date, 
           start_time, 
           duration_minutes, 
-          special_notices, 
+          special_notices || null, 
           initialStatus,
           category,
           sbu,
-          created_by_name,
-          req.user.id
+          created_by_name // Using created_by_name instead of req.user.id as per your schema
         ]
       );
 
+      console.log('Auction inserted with result:', auctionResult);
       const auctionDbId = auctionResult.insertId;
       
-      // Get the created auction
+      // Get the created auction using the UUID id
       const [createdAuction] = await connection.execute(
-        'SELECT * FROM auctions WHERE id = ?',
-        [auctionDbId]
+        'SELECT * FROM auctions WHERE auction_id = ?',
+        [auctionId]
       );
 
       if (!createdAuction.length) {
         throw new Error('Failed to retrieve created auction');
       }
 
-      // Add selected bidders
-      const bidderInvites = selected_bidders.map(bidderId => [auctionDbId, bidderId]);
+      console.log('Retrieved created auction:', createdAuction[0]);
+
+      // Add selected bidders - using the UUID id from the created auction
+      const auctionUUID = createdAuction[0].id;
+      const bidderInvites = selected_bidders.map(bidderId => [auctionUUID, bidderId]);
       
       if (bidderInvites.length > 0) {
         const placeholders = bidderInvites.map(() => '(?, ?)').join(', ');
         const flatValues = bidderInvites.flat();
+        
+        console.log('Inserting auction bidders:', flatValues);
         
         await connection.execute(
           `INSERT INTO auction_bidders (auction_id, bidder_id) VALUES ${placeholders}`,
@@ -157,54 +202,65 @@ const createAuction = async (req, res) => {
       return { auction: createdAuction[0], auction_id: auctionId };
     });
 
-    if (result.error) throw result.error;
+    if (result.error) {
+      console.error('Transaction error:', result.error);
+      throw result.error;
+    }
+    
+    console.log('Transaction completed successfully:', result.data);
     
     // Send emails to selected bidders
-    const { data: bidders, error: biddersError } = await query(
-      `SELECT email, name FROM users WHERE id IN (${selected_bidders.map(() => '?').join(',')}) AND role = 'bidder' AND is_active = TRUE`,
-      selected_bidders
-    );
-    
-    if (biddersError) {
-      console.error('Error fetching bidders for email:', biddersError);
-    } else if (bidders && bidders.length > 0) {
-      // Format date/time for email in Sri Lanka timezone
-      const formattedDateTime = moment.tz(`${auction_date} ${start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo')
-        .format('MMMM DD, YYYY at hh:mm A');
+    try {
+      const { data: bidders, error: biddersError } = await query(
+        `SELECT email, name FROM users WHERE id IN (${selected_bidders.map(() => '?').join(',')}) AND role = 'bidder' AND is_active = TRUE`,
+        selected_bidders
+      );
       
-      const emailPromises = bidders.map(async (bidder) => {
-        const emailHTML = `
-          <h2>Auction Invitation - Anunine Holdings Pvt Ltd</h2>
-          <p>Dear ${bidder.name},</p>
-          <p>You've been invited to participate in a new auction:</p>
-          <p><strong>Title:</strong> ${title}</p>
-          <p><strong>Category:</strong> ${category}</p>
-          <p><strong>SBU:</strong> ${sbu}</p>
-          <p><strong>Date & Time:</strong> ${formattedDateTime} (Sri Lanka Time)</p>
-          <p><strong>Duration:</strong> ${duration_minutes} minutes</p>
-          ${special_notices ? `<p><strong>Special Notices:</strong> ${special_notices}</p>` : ''}
-          <p>Created by: ${created_by_name}</p>
-          <p>Please login to participate.</p>
-          <br>
-          <p>Best regards,<br>Anunine Holdings Pvt Ltd</p>
-        `;
+      if (biddersError) {
+        console.error('Error fetching bidders for email:', biddersError);
+      } else if (bidders && bidders.length > 0) {
+        // Format date/time for email in Sri Lanka timezone
+        const formattedDateTime = moment.tz(`${auction_date} ${start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo')
+          .format('MMMM DD, YYYY at hh:mm A');
         
-        try {
-          await sendEmail(bidder.email, `Auction Invitation - ${title}`, emailHTML);
-        } catch (emailError) {
-          console.error(`Failed to send email to ${bidder.email}:`, emailError);
-        }
-      });
+        const emailPromises = bidders.map(async (bidder) => {
+          const emailHTML = `
+            <h2>Auction Invitation - Anunine Holdings Pvt Ltd</h2>
+            <p>Dear ${bidder.name},</p>
+            <p>You've been invited to participate in a new auction:</p>
+            <p><strong>Title:</strong> ${title}</p>
+            <p><strong>Category:</strong> ${category}</p>
+            <p><strong>SBU:</strong> ${sbu}</p>
+            <p><strong>Date & Time:</strong> ${formattedDateTime} (Sri Lanka Time)</p>
+            <p><strong>Duration:</strong> ${duration_minutes} minutes</p>
+            ${special_notices ? `<p><strong>Special Notices:</strong> ${special_notices}</p>` : ''}
+            <p>Created by: ${created_by_name}</p>
+            <p>Please login to participate.</p>
+            <br>
+            <p>Best regards,<br>Anunine Holdings Pvt Ltd</p>
+          `;
+          
+          try {
+            await sendEmail(bidder.email, `Auction Invitation - ${title}`, emailHTML);
+          } catch (emailError) {
+            console.error(`Failed to send email to ${bidder.email}:`, emailError);
+          }
+        });
 
-      await Promise.all(emailPromises);
+        await Promise.all(emailPromises);
+      }
+    } catch (emailError) {
+      console.error('Error in email sending process:', emailError);
+      // Don't fail the entire operation for email errors
     }
     
     res.json({ 
       success: true, 
-      auction: result.auction, 
-      auction_id: result.auction_id,
+      auction: result.data.auction, 
+      auction_id: result.data.auction_id,
       message: 'Auction created successfully'
     });
+
   } catch (error) {
     console.error('Create auction error:', error);
     res.status(500).json({ 
