@@ -778,6 +778,8 @@ const getAllAuctionsAdmin = async (req, res) => {
             SELECT 
                 a.auction_id AS AuctionID,
                 a.title AS Title,
+                a.category,
+                a.sbu,
                 CONCAT(a.auction_date, ' ', a.start_time) AS DateTime,
                 a.duration_minutes AS Duration,
                 a.status AS Status,
@@ -815,6 +817,8 @@ const getAllAuctionsAdmin = async (req, res) => {
           return {
             AuctionID: auction.AuctionID,
             Title: auction.Title,
+            Category: auction.category,
+            SBU: auction.sbu,
             DateTime: auction.DateTime,
             Duration: `${auction.Duration} minutes`,
             Status: calculatedStatus.charAt(0).toUpperCase() + calculatedStatus.slice(1),
@@ -837,6 +841,402 @@ const getAllAuctionsAdmin = async (req, res) => {
     }
 };
 
+
+// Add these methods to your existing auctionController.js file
+
+/**
+ * Update auction details
+ * Only allows updating if auction hasn't started yet
+ */
+const updateAuction = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+    const { 
+      title, 
+      auction_date, 
+      start_time, 
+      duration_minutes, 
+      special_notices, 
+      selected_bidders,
+      category,
+      sbu
+    } = req.body;
+
+    console.log('Update auction request:', { auctionId, body: req.body });
+
+    // Check if user is authenticated
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Authentication required' 
+      });
+    }
+
+    // Get the auction to check its current status
+    const { data: existingAuction, error: fetchError } = await query(
+      'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
+      [auctionId, auctionId]
+    );
+
+    if (fetchError || !existingAuction || existingAuction.length === 0) {
+      console.error('Auction not found:', fetchError);
+      return res.status(404).json({
+        success: false,
+        error: 'Auction not found'
+      });
+    }
+
+    const auction = existingAuction[0];
+    
+    // Check if auction can be updated (not started yet)
+    const auctionStatus = getAuctionStatus(auction);
+    if (auctionStatus === 'live' || auctionStatus === 'ended') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot update auction that has already started or ended'
+      });
+    }
+
+    // Validate required fields
+    if (!title || !auction_date || !start_time || !duration_minutes || 
+        !selected_bidders?.length || !category || !sbu) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required fields' 
+      });
+    }
+
+    // Validate SBU
+    const allowedSBUs = ['SBU1', 'SBU2', 'SBU3', 'SBU4'];
+    if (!allowedSBUs.includes(sbu)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid SBU value'
+      });
+    }
+
+    // Validate auction date/time is in future
+    const nowSL = getCurrentSLTime();
+    const auctionDateTime = moment.tz(`${auction_date} ${start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    
+    if (!auctionDateTime.isValid() || auctionDateTime.isBefore(nowSL)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Auction date and time must be in the future'
+      });
+    }
+
+    // Validate selected bidders
+    const { data: validBidders, error: biddersValidationError } = await query(
+      `SELECT id FROM users WHERE id IN (${selected_bidders.map(() => '?').join(',')}) AND role = 'bidder' AND is_active = TRUE`,
+      selected_bidders
+    );
+    
+    if (biddersValidationError || validBidders.length !== selected_bidders.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'One or more selected bidders are invalid or inactive'
+      });
+    }
+
+    // Update auction with transaction
+    const result = await transaction(async (connection) => {
+      // Update auction details
+      const newStatus = getAuctionStatus({ 
+        auction_date, 
+        start_time, 
+        duration_minutes 
+      });
+
+      await connection.execute(
+        `UPDATE auctions SET 
+          title = ?, 
+          auction_date = ?, 
+          start_time = ?, 
+          duration_minutes = ?, 
+          special_notices = ?, 
+          status = ?,
+          category = ?,
+          sbu = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+        [
+          title, 
+          auction_date, 
+          start_time, 
+          duration_minutes, 
+          special_notices || null,
+          newStatus,
+          category,
+          sbu,
+          auction.id
+        ]
+      );
+
+      // Update invited bidders - remove existing and add new ones
+      await connection.execute(
+        'DELETE FROM auction_bidders WHERE auction_id = ?',
+        [auction.id]
+      );
+
+      if (selected_bidders.length > 0) {
+        const bidderInvites = selected_bidders.map(bidderId => [auction.id, bidderId]);
+        const placeholders = bidderInvites.map(() => '(?, ?)').join(', ');
+        const flatValues = bidderInvites.flat();
+        
+        await connection.execute(
+          `INSERT INTO auction_bidders (auction_id, bidder_id) VALUES ${placeholders}`,
+          flatValues
+        );
+      }
+
+      // Get updated auction
+      const [updatedAuction] = await connection.execute(
+        'SELECT * FROM auctions WHERE id = ?',
+        [auction.id]
+      );
+
+      return updatedAuction[0];
+    });
+
+    if (result.error) {
+      console.error('Transaction error:', result.error);
+      throw result.error;
+    }
+
+    console.log('Auction updated successfully:', result.data);
+
+    res.json({
+      success: true,
+      auction: result.data,
+      message: 'Auction updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Update auction error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Delete auction
+ * Only allows deletion if auction hasn't started yet or has no bids
+ */
+const deleteAuction = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+
+    console.log('Delete auction request:', auctionId);
+
+    // Check if user is authenticated
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Authentication required' 
+      });
+    }
+
+    // Get the auction to check its current status
+    const { data: existingAuction, error: fetchError } = await query(
+      'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
+      [auctionId, auctionId]
+    );
+
+    if (fetchError || !existingAuction || existingAuction.length === 0) {
+      console.error('Auction not found:', fetchError);
+      return res.status(404).json({
+        success: false,
+        error: 'Auction not found'
+      });
+    }
+
+    const auction = existingAuction[0];
+    
+    // Check if auction can be deleted
+    const auctionStatus = getAuctionStatus(auction);
+    if (auctionStatus === 'live') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot delete a live auction'
+      });
+    }
+
+    // Check if there are any bids for this auction
+    const { data: existingBids, error: bidsError } = await query(
+      'SELECT COUNT(*) as bid_count FROM bids WHERE auction_id = ?',
+      [auction.id]
+    );
+
+    if (bidsError) {
+      console.error('Error checking existing bids:', bidsError);
+      return res.status(500).json({
+        success: false,
+        error: 'Error checking auction bids'
+      });
+    }
+
+    if (existingBids[0].bid_count > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot delete auction that has received bids'
+      });
+    }
+
+    // Delete auction with transaction (cascade will handle related records)
+    const result = await transaction(async (connection) => {
+      // Delete auction (cascade will handle auction_bidders)
+      await connection.execute(
+        'DELETE FROM auctions WHERE id = ?',
+        [auction.id]
+      );
+
+      return { deleted: true };
+    });
+
+    if (result.error) {
+      console.error('Transaction error:', result.error);
+      throw result.error;
+    }
+
+    console.log('Auction deleted successfully:', auction.auction_id);
+
+    res.json({
+      success: true,
+      message: 'Auction deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete auction error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Get auction statistics for admin view
+ */
+const getAuctionStatistics = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+
+    console.log('Get auction statistics request:', auctionId);
+
+    // Get auction details
+    const { data: auction, error: auctionError } = await query(
+      'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
+      [auctionId, auctionId]
+    );
+
+    if (auctionError || !auction || auction.length === 0) {
+      console.error('Auction not found:', auctionError);
+      return res.status(404).json({
+        success: false,
+        error: 'Auction not found'
+      });
+    }
+
+    const auctionData = auction[0];
+
+    // Get invited bidders count
+    const { data: invitedCount } = await query(
+      'SELECT COUNT(*) as count FROM auction_bidders WHERE auction_id = ?',
+      [auctionData.id]
+    );
+
+    // Get total bids count
+    const { data: totalBids } = await query(
+      'SELECT COUNT(*) as count FROM bids WHERE auction_id = ?',
+      [auctionData.id]
+    );
+
+    // Get unique bidders count (who actually placed bids)
+    const { data: activeBidders } = await query(
+      'SELECT COUNT(DISTINCT bidder_id) as count FROM bids WHERE auction_id = ?',
+      [auctionData.id]
+    );
+
+    // Get bid statistics
+    const { data: bidStats } = await query(
+      `SELECT 
+        MIN(amount) as lowest_bid,
+        MAX(amount) as highest_bid,
+        AVG(amount) as average_bid,
+        COUNT(*) as total_bids
+      FROM bids WHERE auction_id = ?`,
+      [auctionData.id]
+    );
+
+    // Get time-based bid distribution (bids per hour)
+    const { data: bidDistribution } = await query(
+      `SELECT 
+        HOUR(bid_time) as hour,
+        COUNT(*) as bid_count
+      FROM bids 
+      WHERE auction_id = ?
+      GROUP BY HOUR(bid_time)
+      ORDER BY hour`,
+      [auctionData.id]
+    );
+
+    // Calculate auction status and timing info
+    const currentStatus = getAuctionStatus(auctionData);
+    const nowSL = getCurrentSLTime();
+    const startDateTime = moment.tz(`${auctionData.auction_date} ${auctionData.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    const endDateTime = startDateTime.clone().add(auctionData.duration_minutes, 'minutes');
+
+    const statistics = {
+      auction_info: {
+        id: auctionData.auction_id,
+        title: auctionData.title,
+        status: currentStatus,
+        category: auctionData.category,
+        sbu: auctionData.sbu
+      },
+      participation: {
+        invited_bidders: invitedCount[0].count,
+        active_bidders: activeBidders[0].count,
+        participation_rate: invitedCount[0].count > 0 
+          ? ((activeBidders[0].count / invitedCount[0].count) * 100).toFixed(2)
+          : 0
+      },
+      bidding: {
+        total_bids: totalBids[0].count,
+        lowest_bid: bidStats[0].lowest_bid,
+        highest_bid: bidStats[0].highest_bid,
+        average_bid: bidStats[0].average_bid ? parseFloat(bidStats[0].average_bid).toFixed(2) : null,
+        bid_distribution: bidDistribution
+      },
+      timing: {
+        start_time: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+        end_time: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
+        duration_minutes: auctionData.duration_minutes,
+        time_remaining: currentStatus === 'live' ? endDateTime.diff(nowSL, 'milliseconds') : null
+      }
+    };
+
+    res.json({
+      success: true,
+      statistics,
+      current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss')
+    });
+
+  } catch (error) {
+    console.error('Get auction statistics error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 module.exports = {
   createAuction,
   getLiveAuction,
@@ -850,5 +1250,8 @@ module.exports = {
   updateAuctionStatuses, // Export for use in scheduler
   getCurrentSLTime,
   isAuctionLive,
-  getAuctionStatus
+  getAuctionStatus,
+  updateAuction,
+  deleteAuction,
+  getAuctionStatistics
 };

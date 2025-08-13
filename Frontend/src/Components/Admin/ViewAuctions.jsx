@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getAllAuctions, getAuctionDetails, deleteAuction } from '../../services/auctionService';
+import { getAllAuctions, deleteAuction } from '../../services/auctionService';
 import AuctionDetailsModal from './AuctionDetailsModal';
 import EditAuctionModal from './EditAuctionModal';
 import '../../styles/viewAuctions.css';
@@ -260,9 +260,10 @@ const ViewAuctions = () => {
             >
               <option value="">All Statuses</option>
               <option value="pending">Pending</option>
-              <option value="live">Live</option>
-              <option value="ended">Ended</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="live">Approved</option>
+              <option value="ended">Rejected</option>
+              <option value="cancelled">Live</option>
+              <option value="default">Ended</option>
             </select>
           </div>
 
@@ -392,10 +393,10 @@ const ViewAuctions = () => {
                   
                   return (
                     <tr key={auction.AuctionID || auction.id}>
-                      <td className="auction-id">{auction.AuctionID || auction.auction_id}</td>
-                      <td className="auction-title">{auction.Title || auction.title}</td>
-                      <td>{auction.category}</td>
-                      <td>{auction.sbu}</td>
+                      <td className="auction-id">{auction.AuctionID}</td>
+                      <td className="auction-title">{auction.Title}</td>
+                      <td>{auction.Category}</td>
+                      <td>{auction.SBU}</td>
                       <td>{dateTime.date}</td>
                       <td>{dateTime.time}</td>
                       <td>{auction.Duration || `${auction.duration_minutes} min`}</td>

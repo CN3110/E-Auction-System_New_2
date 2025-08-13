@@ -49,7 +49,7 @@ export const getAllAuctions = async () => {
       throw new Error('No authentication token found');
     }
 
-    const response = await fetch(`${API_URL}/auction/`, {
+    const response = await fetch(`${API_URL}/auction`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

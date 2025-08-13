@@ -69,7 +69,7 @@ const AuctionDetailsModal = ({ auction, onClose }) => {
         minute: '2-digit',
         hour12: true
       });
-    } catch (err) {
+    } catch (e) {
       return `${date} ${time}`;
     }
   };
