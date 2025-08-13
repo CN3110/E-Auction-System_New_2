@@ -21,58 +21,75 @@ const AuctionDetailsModal = ({ auction, onClose }) => {
    * Fetch detailed auction information including invited bidders and bidding data
    */
   const fetchAuctionDetails = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  try {
+    setLoading(true);
+    setError(null);
 
-      // Fetch auction details and rankings in parallel
-      const [detailsResponse, rankingsResponse] = await Promise.allSettled([
-        getAuctionDetails(auction.id || auction.AuctionID),
-        getAuctionRankings(auction.id || auction.AuctionID)
-      ]);
+    // Use the correct ID field - prefer auction_id if available
+    const identifier = auction.auction_id || auction.id || auction.AuctionID;
+    console.log('Fetching details for:', identifier);
 
-      // Handle auction details response
-      if (detailsResponse.status === 'fulfilled' && detailsResponse.value.success) {
-        setAuctionDetails(detailsResponse.value.auction);
+    const [detailsResponse, rankingsResponse] = await Promise.allSettled([
+      getAuctionDetails(identifier),
+      getAuctionRankings(identifier)
+    ]);
+
+    let details = null;
+    let rankings = [];
+
+    // Handle details response
+    if (detailsResponse.status === 'fulfilled') {
+      if (detailsResponse.value?.success) {
+        details = {
+          ...detailsResponse.value.auction,
+          // Ensure backward compatibility
+          InvitedBidders: detailsResponse.value.auction.auction_bidders?.map(b => b.name).join(', ') || 'No bidders invited'
+        };
       } else {
-        console.error('Failed to fetch auction details:', detailsResponse.reason);
+        throw new Error(detailsResponse.value?.error || 'Invalid auction data');
       }
-
-      // Handle rankings response
-      if (rankingsResponse.status === 'fulfilled' && rankingsResponse.value.success) {
-        setRankings(rankingsResponse.value.rankings || []);
-      } else {
-        console.error('Failed to fetch rankings:', rankingsResponse.reason);
-      }
-
-    } catch (err) {
-      console.error('Error fetching auction details:', err);
-      setError('Failed to load auction details');
-    } finally {
-      setLoading(false);
+    } else {
+      throw detailsResponse.reason;
     }
-  };
+
+    // Handle rankings response
+    if (rankingsResponse.status === 'fulfilled' && rankingsResponse.value?.success) {
+      rankings = rankingsResponse.value.rankings || [];
+    }
+
+    console.log('Fetched details:', details);
+    setAuctionDetails(details);
+    setRankings(rankings);
+  } catch (err) {
+    console.error('Fetch error:', err);
+    setError(err.message || 'Failed to load auction details');
+  } finally {
+    setLoading(false);
+  }
+};
 
   /**
    * Format date and time for display
    */
-  const formatDateTime = (date, time) => {
-    if (!date || !time) return 'Not available';
-    
-    try {
-      const dateTime = new Date(`${date}T${time}`);
-      return dateTime.toLocaleString('en-GB', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-    } catch (e) {
-      return `${date} ${time}`;
-    }
-  };
+  const formatDateTime = (dateTimeString) => {
+  if (!dateTimeString) return 'Not available';
+  
+  try {
+    // Handle both combined date_time and separate date/time
+    const dateTime = new Date(dateTimeString);
+    return dateTime.toLocaleString('en-GB', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch (e) {
+    console.error('Date formatting error:', e);
+    return dateTimeString; // Return the original string if parsing fails
+  }
+};
 
   /**
    * Get status badge class for styling
@@ -181,13 +198,13 @@ const AuctionDetailsModal = ({ auction, onClose }) => {
                 <div className="detail-item">
                   <label>Auction ID:</label>
                   <span className="auction-id-display">
-                    {displayAuction.auction_id || displayAuction.AuctionID}
+                    {displayAuction.auction_id}
                   </span>
                 </div>
 
                 <div className="detail-item">
                   <label>Title:</label>
-                  <span>{displayAuction.title || displayAuction.Title}</span>
+                  <span>{displayAuction.title}</span>
                 </div>
 
                 <div className="detail-item">
@@ -202,25 +219,24 @@ const AuctionDetailsModal = ({ auction, onClose }) => {
 
                 <div className="detail-item">
                   <label>Status:</label>
-                  <span className={getStatusBadgeClass(displayAuction.calculated_status || displayAuction.status)}>
+                  <span className={getStatusBadgeClass(displayAuction.status || displayAuction.status)}>
                     {(displayAuction.calculated_status || displayAuction.status || 'Unknown').toUpperCase()}
                   </span>
                 </div>
 
                 <div className="detail-item">
-                  <label>Date & Time:</label>
-                  <span>
-                    {formatDateTime(
-                      displayAuction.auction_date, 
-                      displayAuction.start_time
-                    )}
-                  </span>
-                </div>
+  <label>Date & Time:</label>
+  <span>
+    {formatDateTime(displayAuction.date_time)}
+  </span>
+</div>
 
                 <div className="detail-item">
-                  <label>Duration:</label>
-                  <span>{displayAuction.duration_minutes} minutes</span>
-                </div>
+  <label>Duration:</label>
+  <span>
+    {displayAuction.duration || displayAuction.duration_minutes || 0} minutes
+  </span>
+</div>
 
                 <div className="detail-item">
                   <label>Created By:</label>
@@ -269,45 +285,38 @@ const AuctionDetailsModal = ({ auction, onClose }) => {
                       <th>Participation Status</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {displayAuction.auction_bidders?.length > 0 ? (
-                      displayAuction.auction_bidders.map((bidder, index) => {
-                        const hasParticipated = rankings.some(rank => rank.bidder_id === bidder.bidder_id);
-                        
-                        return (
-                          <tr key={bidder.bidder_id || index}>
-                            <td className="bidder-name">{bidder.name}</td>
-                            <td className="bidder-company">{bidder.company || 'Not specified'}</td>
-                            <td>
-                              <span className="status-badge status-invited">INVITED</span>
-                            </td>
-                            <td>
-                              <span className={`status-badge ${hasParticipated ? 'status-participated' : 'status-pending'}`}>
-                                {hasParticipated ? 'PARTICIPATED' : 'PENDING'}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : displayAuction.InvitedBidders && displayAuction.InvitedBidders !== 'No bidders invited' ? (
-                      displayAuction.InvitedBidders.split(', ').map((bidderName, index) => (
-                        <tr key={index}>
-                          <td className="bidder-name">{bidderName}</td>
-                          <td className="bidder-company">Not available</td>
-                          <td>
-                            <span className="status-badge status-invited">INVITED</span>
-                          </td>
-                          <td>
-                            <span className="status-badge status-unknown">UNKNOWN</span>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="4" className="no-data">No bidders invited</td>
-                      </tr>
-                    )}
-                  </tbody>
+                  {/* In the bidders tab section */}
+<tbody>
+  {displayAuction.auction_bidders?.length > 0 ? (
+    displayAuction.auction_bidders.map((bidder, index) => (
+      <tr key={bidder.bidder_id || index}>
+        <td className="bidder-name">{bidder.name}</td>
+        <td className="bidder-company">{bidder.company || 'Not specified'}</td>
+        <td>
+          <span className="status-badge status-invited">INVITED</span>
+        </td>
+        <td>
+          <span className={`status-badge ${
+            rankings.some(r => r.bidder_id === bidder.bidder_id) 
+              ? 'status-participated' 
+              : 'status-pending'
+          }`}>
+            {rankings.some(r => r.bidder_id === bidder.bidder_id) 
+              ? 'PARTICIPATED' 
+              : 'PENDING'
+            }
+          </span>
+        </td>
+      </tr>
+    ))
+  ) : (
+    <tr>
+      <td colSpan="4" className="no-data">
+        No bidders invited
+      </td>
+    </tr>
+  )}
+</tbody>
                 </table>
               </div>
             </div>

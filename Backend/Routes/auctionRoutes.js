@@ -30,7 +30,7 @@ router.get('/:auctionId', authenticateToken, getAuction);
 router.get('/:auctionId/rankings', authenticateToken, getLiveRankings);
 
 // New routes for the View Auctions functionality
-
+//router.get('/:auctionId', authenticateToken, getAuction);
 /**
  * Update auction details (Admin only)
  * PUT /api/auction/:auctionId

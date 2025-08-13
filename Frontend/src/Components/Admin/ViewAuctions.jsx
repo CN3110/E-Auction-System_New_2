@@ -188,9 +188,10 @@ const ViewAuctions = () => {
   const getStatusBadgeClass = (status) => {
     switch (status) {
       case 'pending': return 'status-badge status-pending';
+      case 'approved': return 'status-badge status-approved';
+      case 'rejected': return 'status-badge status-rejected';
       case 'live': return 'status-badge status-live';
       case 'ended': return 'status-badge status-ended';
-      case 'cancelled': return 'status-badge status-cancelled';
       default: return 'status-badge status-default';
     }
   };
@@ -260,10 +261,10 @@ const ViewAuctions = () => {
             >
               <option value="">All Statuses</option>
               <option value="pending">Pending</option>
-              <option value="live">Approved</option>
-              <option value="ended">Rejected</option>
-              <option value="cancelled">Live</option>
-              <option value="default">Ended</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="live">Live</option>
+              <option value="ended">Ended</option>
             </select>
           </div>
 

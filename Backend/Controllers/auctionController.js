@@ -588,40 +588,81 @@ const getAuctionResults = async (req, res) => {
   }
 };
 
-// Other existing functions remain the same...
+// view auctions by auction ID - selected auction ID 
 const getAuction = async (req, res) => {
   try {
     const { auctionId } = req.params;
 
     const { data: auction, error } = await query(`
-      SELECT a.*,
+      SELECT 
+        a.id,
+        a.auction_id,
+        a.title,
+        a.status,
+        CONCAT(a.auction_date, ' ', a.start_time) AS date_time,
+        a.duration_minutes AS duration,
+        a.created_by,
+        a.created_at,
+        a.special_notices,
+        a.sbu,
+        a.category,
+        a.updated_at,
         GROUP_CONCAT(
           JSON_OBJECT(
             'bidder_id', ab.bidder_id,
             'name', u.name,
-            'company', u.company
+            'company', u.company,
+            'email', u.email,
+            'phone', u.phone
           )
-        ) as invited_bidders
-      FROM auctions a
-      LEFT JOIN auction_bidders ab ON a.id = ab.auction_id
-      LEFT JOIN users u ON ab.bidder_id = u.id
-      WHERE a.id = ?
-      GROUP BY a.id
+        ) AS invited_bidders,
+        (
+          SELECT COUNT(*) 
+          FROM bids b 
+          WHERE b.auction_id = a.id
+        ) AS total_bids,
+        (
+          SELECT MAX(amount) 
+          FROM bids b 
+          WHERE b.auction_id = a.id
+        ) AS highest_bid,
+        (
+          SELECT JSON_OBJECT(
+            'winner_id', ar.winner_id,
+            'winning_amount', ar.winning_amount,
+            'ended_at', ar.ended_at
+          )
+          FROM auction_results ar
+          WHERE ar.auction_id = a.id
+          LIMIT 1
+        ) AS result_info
+      FROM 
+        auctions a
+      LEFT JOIN 
+        auction_bidders ab ON a.id = ab.auction_id
+      LEFT JOIN 
+        users u ON ab.bidder_id = u.id
+      WHERE 
+        a.auction_id = ?
+      GROUP BY 
+        a.id
     `, [auctionId]);
 
     if (error || !auction || auction.length === 0) {
-      console.error('Get auction error:', error);
       return res.status(404).json({
         success: false,
         error: 'Auction not found'
       });
     }
 
-    // Parse the invited_bidders JSON
     const auctionData = auction[0];
+    
+    // Parse JSON fields
     if (auctionData.invited_bidders) {
-      auctionData.auction_bidders = JSON.parse(`[${auctionData.invited_bidders}]`);
-      delete auctionData.invited_bidders;
+      auctionData.invited_bidders = JSON.parse(`[${auctionData.invited_bidders}]`);
+    }
+    if (auctionData.result_info) {
+      auctionData.result_info = JSON.parse(auctionData.result_info);
     }
 
     // Add calculated status and timing info
