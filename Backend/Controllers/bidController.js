@@ -1,7 +1,21 @@
 const { query } = require('../Config/database');
 const moment = require('moment-timezone');
 
-// Place a bid 
+// Helper function to get current Sri Lanka time
+const getCurrentSLTime = () => {
+  return moment().tz('Asia/Colombo');
+};
+
+// Helper function to check if auction is live (consistent with auction controller)
+const isAuctionLive = (auction) => {
+  const nowSL = getCurrentSLTime();
+  const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+  const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+  
+  return nowSL.isBetween(startDateTime, endDateTime, null, '[]'); // inclusive of start and end
+};
+
+// Place a bid - FIXED TIMEZONE
 const placeBid = async (req, res) => {
     try {
         const { amount, auction_id } = req.body;
@@ -37,15 +51,25 @@ const placeBid = async (req, res) => {
 
         const auction = auctions[0];
 
-        // Check if auction is live (Sri Lanka time)
-        const nowSL = moment().tz('Asia/Colombo');
-        const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-        const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
-
-        if (!nowSL.isBetween(startDateTime, endDateTime)) {
+        // Check if auction is live using Sri Lanka time
+        if (!isAuctionLive(auction)) {
+            const nowSL = getCurrentSLTime();
+            const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+            const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+            
+            let message = 'Auction is not currently live';
+            if (nowSL.isBefore(startDateTime)) {
+                message = `Auction hasn't started yet. It will begin at ${startDateTime.format('MMMM DD, YYYY hh:mm A')} (Sri Lanka Time)`;
+            } else if (nowSL.isAfter(endDateTime)) {
+                message = `Auction has ended. It ended at ${endDateTime.format('MMMM DD, YYYY hh:mm A')} (Sri Lanka Time)`;
+            }
+            
             return res.status(400).json({ 
                 success: false,
-                error: 'Auction is not currently live' 
+                error: message,
+                current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
+                auction_start: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+                auction_end: endDateTime.format('YYYY-MM-DD HH:mm:ss')
             });
         }
 
@@ -62,10 +86,11 @@ const placeBid = async (req, res) => {
             });
         }
 
-        // Insert the new bid
+        // Insert the new bid with Sri Lanka time
+        const bidTime = getCurrentSLTime();
         const { data: bidResult, error: bidError } = await query(
             'INSERT INTO bids (auction_id, bidder_id, amount, bid_time) VALUES (?, ?, ?, ?)',
-            [auction_id, bidder_id, parseFloat(amount), nowSL.toISOString()]
+            [auction_id, bidder_id, parseFloat(amount), bidTime.format('YYYY-MM-DD HH:mm:ss')]
         );
 
         if (bidError) {
@@ -95,10 +120,11 @@ const placeBid = async (req, res) => {
 
         res.status(201).json({
             success: true,
-            message: 'Bid placed successfully',
+            message: 'Bid placed successfully!',
             bid: newBid,
             rank: rank,
-            currentLowest: lowestBids?.[0]?.amount || parseFloat(amount)
+            currentLowest: lowestBids?.[0]?.amount || parseFloat(amount),
+            bid_time_sl: bidTime.format('YYYY-MM-DD HH:mm:ss')
         });
 
     } catch (error) {
@@ -171,7 +197,8 @@ const getLatestBid = async (req, res) => {
 
         res.json({
             success: true,
-            bid: bids && bids.length > 0 ? bids[0] : null
+            bid: bids && bids.length > 0 ? bids[0] : null,
+            current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
         });
 
     } catch (error) {
@@ -207,7 +234,8 @@ const getBidderRank = async (req, res) => {
         res.json({
             success: true,
             rank: rank,
-            totalBidders: totalBidders?.length || 0
+            totalBidders: totalBidders?.length || 0,
+            current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
         });
 
     } catch (error) {
@@ -242,7 +270,8 @@ const getAuctionBids = async (req, res) => {
 
         res.json({
             success: true,
-            bids
+            bids,
+            current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
         });
 
     } catch (error) {
@@ -254,7 +283,7 @@ const getAuctionBids = async (req, res) => {
     }
 };
 
-// Get bidder's auction history
+// Get bidder's auction history - FIXED TIMEZONE
 const getBidderHistory = async (req, res) => {
     try {
         const bidderId = req.user.id;
@@ -308,7 +337,7 @@ const getBidderHistory = async (req, res) => {
         const totalAuctions = processedHistory.length;
         const paginatedHistory = processedHistory.slice(offset, offset + parseInt(limit));
 
-        // Calculate win/loss result for each auction based on the bidder's LAST bid
+        // Calculate win/loss result for each auction based on the bidder's LAST bid with proper timezone handling
         const historyWithResults = await Promise.all(
             paginatedHistory.map(async (historyItem) => {
                 try {
@@ -319,14 +348,14 @@ const getBidderHistory = async (req, res) => {
                         return { ...historyItem, result: 'Unknown' };
                     }
 
-                    // Check if auction has ended
-                    const now = new Date();
-                    const auctionStart = new Date(`${auction.auction_date}T${auction.start_time}`);
-                    const auctionEnd = new Date(auctionStart.getTime() + auction.duration_minutes * 60000);
+                    // Check if auction has ended using Sri Lanka time
+                    const nowSL = getCurrentSLTime();
+                    const auctionStart = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+                    const auctionEnd = auctionStart.clone().add(auction.duration_minutes, 'minutes');
                     
                     if (auction.status === 'cancelled') {
                         result = 'Cancelled';
-                    } else if (now < auctionEnd && auction.status !== 'ended') {
+                    } else if (nowSL.isBefore(auctionEnd) && auction.status !== 'ended') {
                         result = 'In Progress';
                     } else {
                         // Auction has ended, determine if bidder's LAST bid was the winning bid
@@ -373,7 +402,8 @@ const getBidderHistory = async (req, res) => {
                 total_bids_placed: totalBidsCount,
                 auctions_won: wonAuctions,
                 auctions_completed: completedAuctions
-            }
+            },
+            current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
         });
 
     } catch (error) {
@@ -441,5 +471,7 @@ module.exports = {
     getBidderRank,
     getAuctionBids,
     getBidderHistory,
-    determineLastBidResult
+    determineLastBidResult,
+    getCurrentSLTime,
+    isAuctionLive
 };

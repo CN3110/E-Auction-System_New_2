@@ -16,7 +16,11 @@ import {
   Paper,
   Chip,
   Typography,
-  Box
+  Box,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel
 } from '@mui/material';
 import '../../styles/createAuction.css';
 import Card from '../Common/Card';
@@ -33,7 +37,10 @@ const CreateAuction = () => {
     start_time: '',
     duration_minutes: 30,
     special_notices: '',
-    selected_bidders: []
+    selected_bidders: [],
+    category: '',
+    sbu: '',
+    created_by_name: ''
   });
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,6 +51,9 @@ const CreateAuction = () => {
   const [auctionsLoading, setAuctionsLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // SBU options
+  const sbuOptions = ['SBU1', 'SBU2', 'SBU3', 'SBU4']; // Replace with your actual SBUs
 
   useEffect(() => {
     const loadBidders = async () => {
@@ -69,17 +79,19 @@ const CreateAuction = () => {
       setAuctionsLoading(true);
       const data = await getAllAuctions();
       
-      // Transform the API data to match frontend expectations
       const transformedAuctions = data.auctions.map(auction => {
         const [date, time] = auction.DateTime ? auction.DateTime.split(' ') : ['', ''];
         return {
-          id: auction.AuctionID, // Added id for React key
+          id: auction.AuctionID,
           auction_id: auction.AuctionID,
           title: auction.Title,
           auction_date: date,
           start_time: time,
           duration_minutes: parseInt(auction.Duration) || 0,
           special_notices: auction.SpecialNotices || '-',
+          category: auction.Category || '',
+          sbu: auction.SBU || '',
+          created_by_name: auction.CreatedByName || '',
           auction_bidders: auction.InvitedBidders ? auction.InvitedBidders.split(', ') : [],
           status: auction.Status ? auction.Status.toLowerCase() : 'ended'
         };
@@ -135,19 +147,21 @@ const CreateAuction = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.title.trim()) {
-      setError('Auction title is required');
-      return;
-    }
+    // Validate required fields
+    const requiredFields = [
+      { field: 'title', message: 'Auction title is required' },
+      { field: 'auction_date', message: 'Auction date is required' },
+      { field: 'start_time', message: 'Start time is required' },
+      { field: 'category', message: 'Category is required' },
+      { field: 'sbu', message: 'SBU is required' },
+      { field: 'created_by_name', message: 'Created by name is required' }
+    ];
     
-    if (!formData.auction_date) {
-      setError('Auction date is required');
-      return;
-    }
-    
-    if (!formData.start_time) {
-      setError('Start time is required');
-      return;
+    for (const { field, message } of requiredFields) {
+      if (!formData[field] || !formData[field].toString().trim()) {
+        setError(message);
+        return;
+      }
     }
     
     if (formData.selected_bidders.length === 0) {
@@ -169,7 +183,10 @@ const CreateAuction = () => {
         start_time: '',
         duration_minutes: 30,
         special_notices: '',
-        selected_bidders: []
+        selected_bidders: [],
+        category: '',
+        sbu: '',
+        created_by_name: ''
       });
       setSearchTerm('');
       
@@ -281,7 +298,7 @@ const CreateAuction = () => {
           </div>
 
           <div className="row mb-3">
-            <div className="col-md-6">
+            <div className="col-md-4">
               <TextField
                 fullWidth
                 type="time"
@@ -294,7 +311,7 @@ const CreateAuction = () => {
                 disabled={loading}
               />
             </div>
-            <div className="col-md-6">
+            <div className="col-md-4">
               <TextField
                 fullWidth
                 type="number"
@@ -305,6 +322,49 @@ const CreateAuction = () => {
                 required
                 disabled={loading}
                 inputProps={{ min: 1, max: 1440 }}
+              />
+            </div>
+            <div className="col-md-4">
+              <FormControl fullWidth>
+                <InputLabel id="sbu-label">SBU</InputLabel>
+                <Select
+                  labelId="sbu-label"
+                  name="sbu"
+                  value={formData.sbu}
+                  onChange={handleChange}
+                  label="SBU"
+                  required
+                  disabled={loading}
+                >
+                  {sbuOptions.map(sbu => (
+                    <MenuItem key={sbu} value={sbu}>{sbu}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </div>
+          </div>
+
+          <div className="row mb-3">
+            <div className="col-md-6">
+              <TextField
+                fullWidth
+                label="Category"
+                name="category"
+                value={formData.category}
+                onChange={handleChange}
+                required
+                disabled={loading}
+              />
+            </div>
+            <div className="col-md-6">
+              <TextField
+                fullWidth
+                label="Created By"
+                name="created_by_name"
+                value={formData.created_by_name}
+                onChange={handleChange}
+                required
+                disabled={loading}
               />
             </div>
           </div>
