@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getAuctionDetails, getAuctionRankings } from '../../services/auctionService';
-import '../../styles/auctionDetailsModal.css';
+import '../../styles/AuctionDetailsModal.css';
 
 const AuctionDetailsModal = ({ auction, onClose }) => {
   // State management
