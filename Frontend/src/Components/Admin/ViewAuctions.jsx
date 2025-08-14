@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getAllAuctions, deleteAuction, getCurrentUser } from '../../services/auctionService';
+import { getCurrentUser, isAdmin, getUserRole } from '../services/authService';
 import AuctionDetailsModal from './AuctionDetailsModal';
 import EditAuctionModal from './EditAuctionModal';
 import '../../styles/viewAuctions.css';
