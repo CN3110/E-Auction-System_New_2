@@ -23,8 +23,25 @@ const getAuctionStatus = (auction) => {
   const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
   const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
   
+  // If auction is rejected or still pending approval
+  if (auction.status === 'rejected' || auction.status === 'pending') {
+    return auction.status;
+  }
+  
+  // Only check time-based status if auction is approved
+  if (auction.status === 'approved') {
+    if (nowSL.isBefore(startDateTime)) {
+      return 'approved'; // Keep as approved until start time
+    } else if (nowSL.isBetween(startDateTime, endDateTime, null, '[]')) {
+      return 'live';
+    } else {
+      return 'ended';
+    }
+  }
+  
+  // For legacy auctions without approval workflow
   if (nowSL.isBefore(startDateTime)) {
-    return 'pending'; // Changed to match your database schema
+    return 'pending';
   } else if (nowSL.isBetween(startDateTime, endDateTime, null, '[]')) {
     return 'live';
   } else {
@@ -32,6 +49,7 @@ const getAuctionStatus = (auction) => {
   }
 };
 
+//create auction fuction 
 const createAuction = async (req, res) => {
   try {
     console.log('Create auction request received');
@@ -271,17 +289,17 @@ const createAuction = async (req, res) => {
   }
 };
 
-// Get live auction for current bidder - FIXED TIMEZONE
+// Get live auction for current bidder - UPDATED for approval workflow
 const getLiveAuction = async (req, res) => {
   try {
     const bidderId = req.user.id;
     const nowSL = getCurrentSLTime();
 
-    // Get all auctions the bidder is invited to
+    // Get all APPROVED auctions the bidder is invited to
     const { data: invitedAuctions, error } = await query(`
       SELECT a.* FROM auctions a
       JOIN auction_bidders ab ON a.id = ab.auction_id
-      WHERE ab.bidder_id = ?
+      WHERE ab.bidder_id = ? AND a.status IN ('approved', 'live')
     `, [bidderId]);
 
     if (error) {
@@ -306,7 +324,7 @@ const getLiveAuction = async (req, res) => {
   }
 };
 
-// Get all auctions (with filtering) - FIXED TIMEZONE
+// Get all auctions (with filtering) - UPDATED for approval workflow
 const getAllAuctions = async (req, res) => {
   try {
     const { status, date } = req.query;
@@ -316,8 +334,8 @@ const getAllAuctions = async (req, res) => {
     let sql = '';
     let params = [];
 
-    if (userRole === 'admin') {
-      // Admin can see all auctions
+    if (userRole === 'admin' || userRole === 'system_admin') {
+      // Admin and System Admin can see all auctions
       sql = 'SELECT * FROM auctions';
       if (status) {
         sql += ' WHERE status = ?';
@@ -328,11 +346,11 @@ const getAllAuctions = async (req, res) => {
         params.push(date);
       }
     } else {
-      // Bidders can only see auctions they're invited to
+      // Bidders can only see APPROVED auctions they're invited to
       sql = `
         SELECT a.* FROM auctions a
         JOIN auction_bidders ab ON a.id = ab.auction_id
-        WHERE ab.bidder_id = ?
+        WHERE ab.bidder_id = ? AND a.status IN ('approved', 'live', 'ended')
       `;
       params.push(userId);
       
@@ -433,32 +451,57 @@ const getAdminLiveAuctions = async (req, res) => {
   }
 };
 
-// Function to update auction statuses in database
+// Function to update auction statuses in database - UPDATED for approval workflow
 const updateAuctionStatuses = async () => {
   try {
-    const { data: auctions, error } = await query('SELECT id, auction_date, start_time, duration_minutes, status FROM auctions');
+    const { data: auctions, error } = await query(
+      'SELECT id, auction_date, start_time, duration_minutes, status FROM auctions WHERE status IN (?, ?, ?)',
+      ['approved', 'live', 'ended']
+    );
     
     if (error) {
       console.error('Error fetching auctions for status update:', error);
       return;
     }
 
+    const nowSL = getCurrentSLTime();
+
     for (const auction of auctions) {
-      const calculatedStatus = getAuctionStatus(auction);
+      let newStatus = auction.status;
+      
+      // Only update status for approved auctions
+      if (auction.status === 'approved') {
+        const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+        const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+        
+        if (nowSL.isSameOrAfter(startDateTime) && nowSL.isBefore(endDateTime)) {
+          newStatus = 'live';
+        } else if (nowSL.isSameOrAfter(endDateTime)) {
+          newStatus = 'ended';
+        }
+      } else if (auction.status === 'live') {
+        const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+        const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+        
+        if (nowSL.isSameOrAfter(endDateTime)) {
+          newStatus = 'ended';
+        }
+      }
       
       // Only update if status has changed
-      if (auction.status !== calculatedStatus) {
+      if (auction.status !== newStatus) {
         await query(
           'UPDATE auctions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          [calculatedStatus, auction.id]
+          [newStatus, auction.id]
         );
-        console.log(`Updated auction ${auction.id} status from ${auction.status} to ${calculatedStatus}`);
+        console.log(`Updated auction ${auction.id} status from ${auction.status} to ${newStatus}`);
       }
     }
   } catch (error) {
     console.error('Error updating auction statuses:', error);
   }
 };
+
 
 // Get auction results with proper timezone handling
 const getAuctionResults = async (req, res) => {
@@ -812,9 +855,10 @@ const getAdminAuctionRankings = async (req, res) => {
   }
 };
 
+// UPDATED: getAllAuctionsAdmin to include approval info
 const getAllAuctionsAdmin = async (req, res) => {
     try {
-        // Get all auctions with invited bidders' names
+        // Get all auctions with invited bidders' names and approval info
         const { data: auctions, error } = await query(`
             SELECT 
                 a.auction_id AS AuctionID,
@@ -824,6 +868,10 @@ const getAllAuctionsAdmin = async (req, res) => {
                 CONCAT(a.auction_date, ' ', a.start_time) AS DateTime,
                 a.duration_minutes AS Duration,
                 a.status AS Status,
+                a.approved_by,
+                a.approved_at,
+                a.rejected_by,
+                a.rejected_at,
                 GROUP_CONCAT(u.name SEPARATOR ', ') AS InvitedBidders
             FROM 
                 auctions a
@@ -852,7 +900,8 @@ const getAllAuctionsAdmin = async (req, res) => {
           const calculatedStatus = getAuctionStatus({
             auction_date: date,
             start_time: time,
-            duration_minutes: auction.Duration
+            duration_minutes: auction.Duration,
+            status: auction.Status
           });
           
           return {
@@ -864,7 +913,11 @@ const getAllAuctionsAdmin = async (req, res) => {
             Duration: `${auction.Duration} minutes`,
             Status: calculatedStatus.charAt(0).toUpperCase() + calculatedStatus.slice(1),
             InvitedBidders: auction.InvitedBidders || 'No bidders invited',
-            calculated_status: calculatedStatus
+            calculated_status: calculatedStatus,
+            approved_by: auction.approved_by,
+            approved_at: auction.approved_at,
+            rejected_by: auction.rejected_by,
+            rejected_at: auction.rejected_at
           };
         });
 
@@ -883,12 +936,162 @@ const getAllAuctionsAdmin = async (req, res) => {
 };
 
 
-// Add these methods to your existing auctionController.js file
+// Approve auction function
+const approveAuction = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+    const approvedBy = req.user.name || req.user.user_id;
 
-/**
- * Update auction details
- * Only allows updating if auction hasn't started yet
- */
+    console.log('Approve auction request:', { auctionId, approvedBy });
+
+    // Check if user is system admin
+    if (req.user.role !== 'system_admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only System Administrator can approve auctions'
+      });
+    }
+
+    // Get auction
+    const { data: auction, error: fetchError } = await query(
+      'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
+      [auctionId, auctionId]
+    );
+
+    if (fetchError || !auction || auction.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Auction not found'
+      });
+    }
+
+    const auctionData = auction[0];
+
+    // Check if auction is in pending status
+    if (auctionData.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot approve auction with status: ${auctionData.status}`
+      });
+    }
+
+    // Update auction status to approved
+    const { error: updateError } = await query(
+      `UPDATE auctions SET 
+        status = 'approved', 
+        approved_by = ?, 
+        approved_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?`,
+      [approvedBy, auctionData.id]
+    );
+
+    if (updateError) {
+      console.error('Error approving auction:', updateError);
+      throw updateError;
+    }
+
+    console.log('Auction approved successfully:', auctionData.auction_id);
+
+    res.json({
+      success: true,
+      message: 'Auction approved successfully',
+      auction_id: auctionData.auction_id
+    });
+
+  } catch (error) {
+    console.error('Approve auction error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+
+// Reject auction function
+const rejectAuction = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+    const { reason } = req.body;
+    const rejectedBy = req.user.name || req.user.user_id;
+
+    console.log('Reject auction request:', { auctionId, rejectedBy, reason });
+
+    // Check if user is system admin
+    if (req.user.role !== 'system_admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only System Administrator can reject auctions'
+      });
+    }
+
+    // Get auction
+    const { data: auction, error: fetchError } = await query(
+      'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
+      [auctionId, auctionId]
+    );
+
+    if (fetchError || !auction || auction.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Auction not found'
+      });
+    }
+
+    const auctionData = auction[0];
+
+    // Check if auction is in pending or approved status
+    if (auctionData.status !== 'pending' && auctionData.status !== 'approved') {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot reject auction with status: ${auctionData.status}`
+      });
+    }
+
+    // Update auction status to rejected
+    const rejectionNotes = reason ? `Rejected: ${reason}` : null;
+    const currentSpecialNotices = auctionData.special_notices;
+    const updatedSpecialNotices = rejectionNotes 
+      ? (currentSpecialNotices ? `${currentSpecialNotices}\n\n${rejectionNotes}` : rejectionNotes)
+      : currentSpecialNotices;
+
+    const { error: updateError } = await query(
+      `UPDATE auctions SET 
+        status = 'rejected', 
+        rejected_by = ?, 
+        rejected_at = CURRENT_TIMESTAMP,
+        special_notices = ?,
+        updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?`,
+      [rejectedBy, updatedSpecialNotices, auctionData.id]
+    );
+
+    if (updateError) {
+      console.error('Error rejecting auction:', updateError);
+      throw updateError;
+    }
+
+    console.log('Auction rejected successfully:', auctionData.auction_id);
+
+    res.json({
+      success: true,
+      message: 'Auction rejected successfully',
+      auction_id: auctionData.auction_id
+    });
+
+  } catch (error) {
+    console.error('Reject auction error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+
 const updateAuction = async (req, res) => {
   try {
     const { auctionId } = req.params;
@@ -1292,7 +1495,10 @@ module.exports = {
   getCurrentSLTime,
   isAuctionLive,
   getAuctionStatus,
+  approveAuction, //
+  rejectAuction,//
   updateAuction,
   deleteAuction,
-  getAuctionStatistics
+  getAuctionStatistics,
+  getAllAuctions,
 };

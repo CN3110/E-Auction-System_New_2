@@ -2,10 +2,19 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../Config/database');
 
-// Hardcoded admin credentials
+// Hardcoded admin and system admin credentials
 const ADMIN_CREDENTIALS = {
   user_id: 'ADMIN',
-  password: 'admin123' // This should be hashed in production
+  password: 'admin123', // This should be hashed in production
+  role: 'admin',
+  name: 'Administrator'
+};
+
+const SYSADMIN_CREDENTIALS = {
+  user_id: 'SYSADMIN',
+  password: 'sysadmin123', // This should be hashed in production
+  role: 'system_admin',
+  name: 'System Administrator'
 };
 
 const login = async (req, res) => {
@@ -36,9 +45,39 @@ const login = async (req, res) => {
         user: {
           id: 'admin-hardcoded-id',
           user_id: ADMIN_CREDENTIALS.user_id,
-          name: 'System Administrator',
+          name: ADMIN_CREDENTIALS.name,
           email: 'admin@eauction.com',
           role: 'admin',
+          company: 'Anunine Holdings Pvt Ltd'
+        }
+      });
+    }
+
+    // Handle system admin login
+    if (user_id.toUpperCase() === SYSADMIN_CREDENTIALS.user_id) {
+      console.log('System Admin login attempt detected');
+      
+      if (password !== SYSADMIN_CREDENTIALS.password) {
+        console.log('System Admin password mismatch');
+        return res.status(401).json({ success: false, error: 'Invalid system admin credentials' });
+      }
+
+      // Generate JWT token for system admin without expiration
+      const token = jwt.sign(
+        { id: 'sysadmin-hardcoded-id', role: 'system_admin', user_id: SYSADMIN_CREDENTIALS.user_id }, 
+        process.env.JWT_SECRET
+      );
+
+      console.log('System Admin login successful');
+      return res.json({
+        success: true,
+        token,
+        user: {
+          id: 'sysadmin-hardcoded-id',
+          user_id: SYSADMIN_CREDENTIALS.user_id,
+          name: SYSADMIN_CREDENTIALS.name,
+          email: 'sysadmin@eauction.com',
+          role: 'system_admin',
           company: 'Anunine Holdings Pvt Ltd'
         }
       });

@@ -10,18 +10,30 @@ const {
   updateAuction,
   deleteAuction,
   getAuctionStatistics,
-  getAdminAuctionRankings
+  getAdminAuctionRankings,
+  approveAuction,
+  rejectAuction
 } = require('../Controllers/auctionController');
-const { authenticateToken, requireAdmin, requireBidder } = require('../Middleware/auth');
+const { 
+  authenticateToken, 
+  requireAdmin, 
+  requireBidder, 
+  requireSystemAdmin,
+  requireAdminOrSystemAdmin 
+} = require('../Middleware/auth');
 
 // Create auction (admin only) - FIXED: Added proper authentication
 router.post('/create', authenticateToken, requireAdmin, createAuction);
 
 // Get all auctions for admin with filters and pagination
-router.get('/', authenticateToken, getAllAuctionsAdmin);
+router.get('/', authenticateToken, requireAdminOrSystemAdmin, getAllAuctionsAdmin);
 
 // Get live auction for logged bidder
 router.get('/bidder/live', authenticateToken, requireBidder, getLiveAuction);
+
+// Approval endpoints (System Admin only)
+router.post('/:auctionId/approve', authenticateToken, requireSystemAdmin, approveAuction);
+router.post('/:auctionId/reject', authenticateToken, requireSystemAdmin, rejectAuction);
 
 // Get specific auction details
 router.get('/:auctionId', authenticateToken, getAuction);
@@ -29,8 +41,6 @@ router.get('/:auctionId', authenticateToken, getAuction);
 // Get live rankings for an auction
 router.get('/:auctionId/rankings', authenticateToken, getLiveRankings);
 
-// New routes for the View Auctions functionality
-//router.get('/:auctionId', authenticateToken, getAuction);
 /**
  * Update auction details (Admin only)
  * PUT /api/auction/:auctionId
@@ -53,7 +63,6 @@ router.get('/:auctionId/statistics', authenticateToken, requireAdmin, getAuction
  * Get admin auction rankings (for detailed view)
  * GET /api/auction/:auctionId/admin-rankings
  */
-router.get('/:auctionId/admin-rankings', authenticateToken, requireAdmin, getAdminAuctionRankings);
-
+router.get('/:auctionId/admin-rankings', authenticateToken, requireAdminOrSystemAdmin, getAdminAuctionRankings);
 
 module.exports = router;
