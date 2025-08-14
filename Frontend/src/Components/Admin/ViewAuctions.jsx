@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getAllAuctions, deleteAuction, getCurrentUser } from '../../services/auctionService';
-import { getCurrentUser, isAdmin, getUserRole } from '../services/authService';
+import { getAllAuctions, deleteAuction } from '../../services/auctionService';
+import { getCurrentUser, isAdmin, isSystemAdmin, isRegularAdmin } from '../../services/authService';
 import AuctionDetailsModal from './AuctionDetailsModal';
 import EditAuctionModal from './EditAuctionModal';
 import '../../styles/viewAuctions.css';
@@ -34,19 +34,6 @@ const ViewAuctions = () => {
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
-
-  // Helper functions for role checking
-  const isSystemAdmin = () => {
-    return currentUser?.role === 'system_admin';
-  };
-
-  const isRegularAdmin = () => {
-    return currentUser?.role === 'admin';
-  };
-
-  const isAdmin = () => {
-    return currentUser?.role === 'admin' || currentUser?.role === 'system_admin';
-  };
 
   /**
    * Fetch all auctions from the API
@@ -129,14 +116,23 @@ const ViewAuctions = () => {
     setCurrentPage(1); // Reset to first page when filters change
   };
 
-  // Debug user info on component mount
+  // Fetch current user on component mount
   useEffect(() => {
-    console.log('ViewAuctions - Current User:', currentUser);
-    console.log('ViewAuctions - User Role:', currentUser?.role);
-    console.log('ViewAuctions - isSystemAdmin():', isSystemAdmin());
-    console.log('ViewAuctions - isAdmin():', isAdmin());
-    console.log('ViewAuctions - isRegularAdmin():', isRegularAdmin());
-  }, [currentUser]);
+    const fetchCurrentUser = async () => {
+      try {
+        const user = await getCurrentUser();
+        setCurrentUser(user);
+        console.log('ViewAuctions - Current User:', user);
+        console.log('ViewAuctions - User Role:', user?.role);
+      } catch (error) {
+        console.error('Failed to fetch current user:', error);
+      } finally {
+        setLoadingUser(false);
+      }
+    };
+
+    fetchCurrentUser();
+  }, []);
 
   // Fetch auctions on component mount
   useEffect(() => {
@@ -148,20 +144,14 @@ const ViewAuctions = () => {
     applyFilters();
   }, [filters, auctions]);
 
+  // Debug user info when currentUser changes
   useEffect(() => {
-    const fetchCurrentUser = async () => {
-      try {
-        const user = await getCurrentUser();
-        setCurrentUser(user);
-      } catch (error) {
-        console.error('Failed to fetch current user:', error);
-      } finally {
-        setLoadingUser(false);
-      }
-    };
-
-    fetchCurrentUser();
-  }, []);
+    if (currentUser) {
+      console.log('ViewAuctions - isSystemAdmin():', isSystemAdmin());
+      console.log('ViewAuctions - isRegularAdmin():', isRegularAdmin());
+      console.log('ViewAuctions - isAdmin():', isAdmin());
+    }
+  }, [currentUser]);
 
   if (loadingUser) {
     return <div>Loading user information...</div>;
@@ -303,6 +293,10 @@ const ViewAuctions = () => {
             <span className="role-indicator"> (Administrator)</span>
           )}
         </h2>
+        <div className="user-info">
+          <span className="welcome-text">Welcome, {currentUser.name}</span>
+          <span className="user-role">Role: {currentUser.role}</span>
+        </div>
         <button 
           className="btn btn-refresh"
           onClick={fetchAuctions}

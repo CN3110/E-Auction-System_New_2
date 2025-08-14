@@ -5,6 +5,7 @@ import {
   approveAuction,
   rejectAuction,
 } from "../../services/auctionService";
+import { isSystemAdmin } from "../../services/authService";
 import "../../styles/AuctionDetailsModal.css";
 
 const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
@@ -211,7 +212,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
   /**
    * Check if current user can approve/reject auctions
    */
-  const canApproveReject = currentUser?.role === 'system_admin';
+  const canApproveReject = isSystemAdmin();
 
   /**
    * Check if auction can be approved/rejected
