@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { getAllAuctions, deleteAuction } from '../../services/auctionService';
+import { getAllAuctions, deleteAuction, getCurrentUser } from '../../services/auctionService';
 import AuctionDetailsModal from './AuctionDetailsModal';
 import EditAuctionModal from './EditAuctionModal';
 import '../../styles/viewAuctions.css';
 
-const ViewAuctions = ({ currentUser }) => {
+const ViewAuctions = () => {
+  //current user state
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+
   // State management
   const [auctions, setAuctions] = useState([]);
   const [filteredAuctions, setFilteredAuctions] = useState([]);
@@ -42,25 +46,6 @@ const ViewAuctions = ({ currentUser }) => {
   const isAdmin = () => {
     return currentUser?.role === 'admin' || currentUser?.role === 'system_admin';
   };
-
-  // Debug user info on component mount
-  useEffect(() => {
-    console.log('ViewAuctions - Current User:', currentUser);
-    console.log('ViewAuctions - User Role:', currentUser?.role);
-    console.log('ViewAuctions - isSystemAdmin():', isSystemAdmin());
-    console.log('ViewAuctions - isAdmin():', isAdmin());
-    console.log('ViewAuctions - isRegularAdmin():', isRegularAdmin());
-  }, [currentUser]);
-
-  // Fetch auctions on component mount
-  useEffect(() => {
-    fetchAuctions();
-  }, []);
-
-  // Apply filters whenever filters or auctions change
-  useEffect(() => {
-    applyFilters();
-  }, [filters, auctions]);
 
   /**
    * Fetch all auctions from the API
@@ -142,6 +127,48 @@ const ViewAuctions = ({ currentUser }) => {
     setFilteredAuctions(filtered);
     setCurrentPage(1); // Reset to first page when filters change
   };
+
+  // Debug user info on component mount
+  useEffect(() => {
+    console.log('ViewAuctions - Current User:', currentUser);
+    console.log('ViewAuctions - User Role:', currentUser?.role);
+    console.log('ViewAuctions - isSystemAdmin():', isSystemAdmin());
+    console.log('ViewAuctions - isAdmin():', isAdmin());
+    console.log('ViewAuctions - isRegularAdmin():', isRegularAdmin());
+  }, [currentUser]);
+
+  // Fetch auctions on component mount
+  useEffect(() => {
+    fetchAuctions();
+  }, []);
+
+  // Apply filters whenever filters or auctions change
+  useEffect(() => {
+    applyFilters();
+  }, [filters, auctions]);
+
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const user = await getCurrentUser();
+        setCurrentUser(user);
+      } catch (error) {
+        console.error('Failed to fetch current user:', error);
+      } finally {
+        setLoadingUser(false);
+      }
+    };
+
+    fetchCurrentUser();
+  }, []);
+
+  if (loadingUser) {
+    return <div>Loading user information...</div>;
+  }
+
+  if (!currentUser) {
+    return <div>Please log in to view auctions</div>;
+  }
 
   /**
    * Handle filter changes
@@ -416,18 +443,18 @@ const ViewAuctions = ({ currentUser }) => {
         <div className="auctions-table-container">
           <table className="auctions-table">
             <thead>
-  <tr>
-    <th>Auction ID</th>
-    <th>Title</th>
-    <th>Category</th>
-    <th>SBU</th>
-    <th>Date</th>
-    <th>Time</th>
-    <th>Duration</th>
-    <th>Status</th>
-    <th>Actions</th>
-  </tr>
-</thead>
+              <tr>
+                <th>Auction ID</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>SBU</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Duration</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
             <tbody>
               {currentItems.length === 0 ? (
                 <tr>

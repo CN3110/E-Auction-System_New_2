@@ -32,6 +32,17 @@ api.interceptors.response.use(
   }
 );
 
+// to get the current user's role
+export const getCurrentUser = async () => {
+  try {
+    const response = await api.get('/auth/current-user');
+    return response.user;
+  } catch (error) {
+    console.error('Error fetching current user:', error);
+    throw error;
+  }
+};
+
 export const fetchActiveBidders = async () => {
   try {
     return await api.get('/admin/bidders/active');
