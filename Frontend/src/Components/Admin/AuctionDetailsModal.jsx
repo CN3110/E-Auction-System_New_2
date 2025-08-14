@@ -218,7 +218,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
    */
   const canTakeAction = (auction) => {
     const status = auction?.calculated_status || auction?.status;
-    return status === 'pending' || (status === 'approved' && canApproveReject);
+    return status === 'pending';
   };
 
   if (loading) {
@@ -265,29 +265,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
           <div className="modal-header">
             <div className="header-content">
               <h2>Auction Details</h2>
-              {/* Show approval actions for System Admin */}
-              {canApproveReject && canTakeAction(displayAuction) && (
-                <div className="approval-actions">
-                  {currentStatus === 'pending' && (
-                    <>
-                      <button
-                        className="btn btn-approve"
-                        onClick={handleApproveAuction}
-                        disabled={actionLoading}
-                      >
-                        {actionLoading ? 'Processing...' : 'Approve'}
-                      </button>
-                      <button
-                        className="btn btn-reject"
-                        onClick={() => setShowRejectModal(true)}
-                        disabled={actionLoading}
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
             </div>
             <button className="close-button" onClick={onClose}>
               ×
@@ -665,6 +642,28 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
               <small>Last updated: {new Date().toLocaleString("en-GB")}</small>
             </div>
             <div className="footer-actions">
+              {canApproveReject && canTakeAction(displayAuction) && (
+                <>
+                  {currentStatus === 'pending' && (
+                    <>
+                      <button
+                        className="btn btn-approve"
+                        onClick={handleApproveAuction}
+                        disabled={actionLoading}
+                      >
+                        {actionLoading ? 'Processing...' : 'Approve'}
+                      </button>
+                      <button
+                        className="btn btn-reject"
+                        onClick={() => setShowRejectModal(true)}
+                        disabled={actionLoading}
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
               <button className="btn btn-secondary" onClick={onClose}>
                 Close
               </button>

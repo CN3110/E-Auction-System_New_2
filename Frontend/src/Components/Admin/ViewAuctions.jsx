@@ -4,9 +4,6 @@ import AuctionDetailsModal from './AuctionDetailsModal';
 import EditAuctionModal from './EditAuctionModal';
 import '../../styles/viewAuctions.css';
 
-// Import auth utilities - make sure this path is correct
-import { isAdmin, isSystemAdmin, isRegularAdmin, debugUserInfo } from '../../utils/auth';
-
 const ViewAuctions = ({ currentUser }) => {
   // State management
   const [auctions, setAuctions] = useState([]);
@@ -33,13 +30,26 @@ const ViewAuctions = ({ currentUser }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
+  // Helper functions for role checking
+  const isSystemAdmin = () => {
+    return currentUser?.role === 'system_admin';
+  };
+
+  const isRegularAdmin = () => {
+    return currentUser?.role === 'admin';
+  };
+
+  const isAdmin = () => {
+    return currentUser?.role === 'admin' || currentUser?.role === 'system_admin';
+  };
+
   // Debug user info on component mount
   useEffect(() => {
     console.log('ViewAuctions - Current User:', currentUser);
+    console.log('ViewAuctions - User Role:', currentUser?.role);
     console.log('ViewAuctions - isSystemAdmin():', isSystemAdmin());
     console.log('ViewAuctions - isAdmin():', isAdmin());
     console.log('ViewAuctions - isRegularAdmin():', isRegularAdmin());
-    debugUserInfo();
   }, [currentUser]);
 
   // Fetch auctions on component mount
@@ -406,23 +416,22 @@ const ViewAuctions = ({ currentUser }) => {
         <div className="auctions-table-container">
           <table className="auctions-table">
             <thead>
-              <tr>
-                <th>Auction ID</th>
-                <th>Title</th>
-                <th>Category</th>
-                <th>SBU</th>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Duration</th>
-                <th>Status</th>
-                {isSystemAdmin() && <th>Approval</th>}
-                <th>Actions</th>
-              </tr>
-            </thead>
+  <tr>
+    <th>Auction ID</th>
+    <th>Title</th>
+    <th>Category</th>
+    <th>SBU</th>
+    <th>Date</th>
+    <th>Time</th>
+    <th>Duration</th>
+    <th>Status</th>
+    <th>Actions</th>
+  </tr>
+</thead>
             <tbody>
               {currentItems.length === 0 ? (
                 <tr>
-                  <td colSpan={isSystemAdmin() ? "10" : "9"} className="no-data">
+                  <td colSpan="9" className="no-data">
                     {filteredAuctions.length === 0 && auctions.length > 0
                       ? 'No auctions match your filters'
                       : 'No auctions found'
@@ -447,23 +456,6 @@ const ViewAuctions = ({ currentUser }) => {
                           {(auction.calculated_status || auction.status || 'unknown').toUpperCase()}
                         </span>
                       </td>
-                      {isSystemAdmin() && (
-                        <td className="approval-info">
-                          {auction.approved_by && (
-                            <div className="approval-details">
-                              <small className="approved-by">✅ {auction.approved_by}</small>
-                            </div>
-                          )}
-                          {auction.rejected_by && (
-                            <div className="approval-details">
-                              <small className="rejected-by">❌ {auction.rejected_by}</small>
-                            </div>
-                          )}
-                          {!auction.approved_by && !auction.rejected_by && auction.calculated_status === 'pending' && (
-                            <span className="pending-approval">Pending Approval</span>
-                          )}
-                        </td>
-                      )}
                       <td className="actions-cell">
                         <div className="actions-buttons">
                           <button

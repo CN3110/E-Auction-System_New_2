@@ -831,3 +831,27 @@
     padding: 10px 15px;
   }
 }
+
+.modal-footer .footer-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.modal-footer .btn-approve {
+  background-color: #28a745;
+  color: white;
+}
+
+.modal-footer .btn-reject {
+  background-color: #dc3545;
+  color: white;
+}
+
+.modal-footer .btn-approve:hover {
+  background-color: #218838;
+}
+
+.modal-footer .btn-reject:hover {
+  background-color: #c82333;
+}
