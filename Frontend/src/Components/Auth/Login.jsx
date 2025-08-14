@@ -40,31 +40,33 @@ const Login = ({ onLogin }) => {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
+      // Debug log to check user data
+      console.log('Login successful. User data:', data.user);
+      console.log('User role:', data.user.role);
+
       // Call onLogin callback if provided
       if (onLogin) {
         onLogin(data.user);
       }
 
-      // Redirect based on role
-      if (data.user.role === 'admin') {
+      // Redirect based on role - Fixed to handle system_admin correctly
+      if (data.user.role === 'admin' || data.user.role === 'system_admin') {
         navigate('/admindashboard');
       } else if (data.user.role === 'bidder') {
         navigate('/bidderdashboard');
-      } else if (data.user.role === 'system_admin') {
-        // System Admin uses the same dashboard as Admin but with different permissions
-        navigate('/admindashboard');
       } else {
-        throw new Error('Unknown user role');
+        throw new Error(`Unknown user role: ${data.user.role}`);
       }
 
-      // Show success message
+      // Show success message with role information
       setAlert({
         show: true,
-        message: `Welcome ${data.user.name}! Redirecting...`,
+        message: `Welcome ${data.user.name}! (${data.user.role}) Redirecting...`,
         type: 'success'
       });
 
     } catch (error) {
+      console.error('Login error:', error);
       setAlert({
         show: true,
         message: error.message,
@@ -132,8 +134,6 @@ const Login = ({ onLogin }) => {
               onClose={() => setAlert({ show: false, message: '', type: '' })}
             />
           )}
-
-          
         </div>
         <Footer />
       </div>

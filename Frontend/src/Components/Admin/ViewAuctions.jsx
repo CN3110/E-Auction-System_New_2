@@ -4,6 +4,9 @@ import AuctionDetailsModal from './AuctionDetailsModal';
 import EditAuctionModal from './EditAuctionModal';
 import '../../styles/viewAuctions.css';
 
+// Import auth utilities - make sure this path is correct
+import { isAdmin, isSystemAdmin, isRegularAdmin, debugUserInfo } from '../../utils/auth';
+
 const ViewAuctions = ({ currentUser }) => {
   // State management
   const [auctions, setAuctions] = useState([]);
@@ -29,6 +32,15 @@ const ViewAuctions = ({ currentUser }) => {
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+
+  // Debug user info on component mount
+  useEffect(() => {
+    console.log('ViewAuctions - Current User:', currentUser);
+    console.log('ViewAuctions - isSystemAdmin():', isSystemAdmin());
+    console.log('ViewAuctions - isAdmin():', isAdmin());
+    console.log('ViewAuctions - isRegularAdmin():', isRegularAdmin());
+    debugUserInfo();
+  }, [currentUser]);
 
   // Fetch auctions on component mount
   useEffect(() => {
@@ -162,7 +174,7 @@ const ViewAuctions = ({ currentUser }) => {
    * Handle edit auction - Only admin can edit
    */
   const handleEditAuction = (auction) => {
-    if (currentUser?.role !== 'admin') {
+    if (!isAdmin()) {
       alert('Only administrators can edit auctions');
       return;
     }
@@ -174,7 +186,7 @@ const ViewAuctions = ({ currentUser }) => {
    * Handle delete auction with confirmation - Only admin can delete
    */
   const handleDeleteAuction = async (auction) => {
-    if (currentUser?.role !== 'admin') {
+    if (!isAdmin()) {
       alert('Only administrators can delete auctions');
       return;
     }
@@ -230,8 +242,6 @@ const ViewAuctions = ({ currentUser }) => {
     };
   };
 
- 
-
   // Pagination logic
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -248,8 +258,11 @@ const ViewAuctions = ({ currentUser }) => {
       <div className="view-auctions-header">
         <h2>
           View Auctions
-          {currentUser?.role === 'system_admin' && (
+          {isSystemAdmin() && (
             <span className="role-indicator"> (System Administrator)</span>
+          )}
+          {isRegularAdmin() && (
+            <span className="role-indicator"> (Administrator)</span>
           )}
         </h2>
         <button 
@@ -402,14 +415,14 @@ const ViewAuctions = ({ currentUser }) => {
                 <th>Time</th>
                 <th>Duration</th>
                 <th>Status</th>
-                {currentUser?.role === 'system_admin' && <th>Approval</th>}
+                {isSystemAdmin() && <th>Approval</th>}
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {currentItems.length === 0 ? (
                 <tr>
-                  <td colSpan={currentUser?.role === 'system_admin' ? "10" : "9"} className="no-data">
+                  <td colSpan={isSystemAdmin() ? "10" : "9"} className="no-data">
                     {filteredAuctions.length === 0 && auctions.length > 0
                       ? 'No auctions match your filters'
                       : 'No auctions found'
@@ -434,7 +447,7 @@ const ViewAuctions = ({ currentUser }) => {
                           {(auction.calculated_status || auction.status || 'unknown').toUpperCase()}
                         </span>
                       </td>
-                      {currentUser?.role === 'system_admin' && (
+                      {isSystemAdmin() && (
                         <td className="approval-info">
                           {auction.approved_by && (
                             <div className="approval-details">
@@ -461,11 +474,12 @@ const ViewAuctions = ({ currentUser }) => {
                             View
                           </button>
                           
+                          {isAdmin() && (
+                            <>
                               <button
                                 className="btn btn-edit"
                                 onClick={() => handleEditAuction(auction)}
                                 title="Edit Auction"
-                                
                               >
                                 Edit
                               </button>
@@ -473,11 +487,11 @@ const ViewAuctions = ({ currentUser }) => {
                                 className="btn btn-delete"
                                 onClick={() => handleDeleteAuction(auction)}
                                 title="Delete Auction"
-                                
                               >
                                 Delete
                               </button>
-                           
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
