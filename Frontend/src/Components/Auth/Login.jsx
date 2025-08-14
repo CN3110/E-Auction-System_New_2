@@ -40,14 +40,29 @@ const Login = ({ onLogin }) => {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
+      // Call onLogin callback if provided
+      if (onLogin) {
+        onLogin(data.user);
+      }
+
       // Redirect based on role
       if (data.user.role === 'admin') {
         navigate('/admindashboard');
       } else if (data.user.role === 'bidder') {
         navigate('/bidderdashboard');
+      } else if (data.user.role === 'system_admin') {
+        // System Admin uses the same dashboard as Admin but with different permissions
+        navigate('/admindashboard');
       } else {
         throw new Error('Unknown user role');
       }
+
+      // Show success message
+      setAlert({
+        show: true,
+        message: `Welcome ${data.user.name}! Redirecting...`,
+        type: 'success'
+      });
 
     } catch (error) {
       setAlert({
@@ -58,6 +73,13 @@ const Login = ({ onLogin }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleInputChange = (field, value) => {
+    setCredentials(prev => ({
+      ...prev,
+      [field]: field === 'userId' ? value.toUpperCase() : value
+    }));
   };
 
   return (
@@ -75,17 +97,21 @@ const Login = ({ onLogin }) => {
               <input 
                 type="text" 
                 value={credentials.userId}
-                onChange={(e) => setCredentials({ ...credentials, userId: e.target.value.toUpperCase()})}
-                placeholder="Enter your User ID (ADMIN or BXXXX)" 
+                onChange={(e) => handleInputChange('userId', e.target.value)}
+                placeholder="Enter your User ID (ADMIN, SYSADMIN, or BXXXX)" 
                 required 
+                maxLength={10}
               />
+              <small className="input-help">
+                Use ADMIN for Administrator, SYSADMIN for System Administrator, or your bidder ID (e.g., B001)
+              </small>
             </div>
             <div className="form-group">
               <label>Password</label>
               <input 
                 type="password" 
                 value={credentials.password}
-                onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
+                onChange={(e) => handleInputChange('password', e.target.value)}
                 placeholder="Enter your password" 
                 required 
               />
@@ -98,7 +124,16 @@ const Login = ({ onLogin }) => {
               {isLoading ? 'Logging in...' : 'Login'}
             </button>
           </form>
-          {alert.show && <Alert message={alert.message} type={alert.type} />}
+          
+          {alert.show && (
+            <Alert 
+              message={alert.message} 
+              type={alert.type}
+              onClose={() => setAlert({ show: false, message: '', type: '' })}
+            />
+          )}
+
+          
         </div>
         <Footer />
       </div>

@@ -118,6 +118,64 @@ export const getAuctionStatistics = async (auctionId) => {
   }
 };
 
+// Add these functions to your existing auctionService.js file
+
+/**
+ * Approve an auction (System Admin only)
+ */
+export const approveAuction = async (auctionId) => {
+  try {
+    const response = await fetch(`${API_URL}/auction/${auctionId}/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error approving auction:', error);
+    throw error;
+  }
+};
+
+/**
+ * Reject an auction (System Admin only)
+ */
+export const rejectAuction = async (auctionId, reason = '') => {
+  try {
+    const response = await fetch(`${API_URL}/auction/${auctionId}/reject`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({ reason })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error rejecting auction:', error);
+    throw error;
+  }
+};
+
+// Helper function to get token (make sure this exists in your service)
+const getToken = () => {
+  return localStorage.getItem('token');
+};
+
 // Export methods for use in components
 export default {
   fetchActiveBidders,

@@ -680,3 +680,154 @@
     font-size: 16px;
   }
 }
+
+/* Add these styles to your existing AuctionDetailsModal.css */
+
+/* Header with approval actions */
+.modal-header .header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-approve {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-approve:hover {
+  background-color: #218838;
+}
+
+.btn-reject {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-reject:hover {
+  background-color: #c82333;
+}
+
+/* Approval status banner */
+.approval-banner {
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  border-radius: 6px;
+  border-left: 4px solid;
+}
+
+.approval-banner.approved {
+  background-color: #d4edda;
+  border-color: #28a745;
+  color: #155724;
+}
+
+.approval-banner.rejected {
+  background-color: #f8d7da;
+  border-color: #dc3545;
+  color: #721c24;
+}
+
+.approval-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.approval-icon {
+  font-size: 18px;
+}
+
+/* Status badges updates */
+.status-badge.status-approved {
+  background-color: #28a745;
+  color: white;
+}
+
+.status-badge.status-rejected {
+  background-color: #dc3545;
+  color: white;
+}
+
+/* Rejection modal */
+.reject-modal {
+  max-width: 500px;
+  width: 90%;
+}
+
+.rejection-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.rejection-textarea:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+/* Role indicator */
+.role-indicator {
+  font-size: 0.9em;
+  color: #6c757d;
+  font-weight: normal;
+}
+
+/* Approval info in table */
+.approval-info {
+  font-size: 0.85em;
+}
+
+.approved-by {
+  color: #28a745;
+  display: block;
+}
+
+.rejected-by {
+  color: #dc3545;
+  display: block;
+}
+
+.pending-approval {
+  color: #ffc107;
+  font-style: italic;
+}
+
+/* Additional responsive styles */
+@media (max-width: 768px) {
+  .approval-actions {
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .btn-approve,
+  .btn-reject {
+    padding: 6px 12px;
+    font-size: 0.9em;
+  }
+  
+  .approval-banner {
+    padding: 10px 15px;
+  }
+}

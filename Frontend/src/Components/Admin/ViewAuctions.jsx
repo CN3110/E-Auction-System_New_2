@@ -4,7 +4,7 @@ import AuctionDetailsModal from './AuctionDetailsModal';
 import EditAuctionModal from './EditAuctionModal';
 import '../../styles/viewAuctions.css';
 
-const ViewAuctions = () => {
+const ViewAuctions = ({ currentUser }) => {
   // State management
   const [auctions, setAuctions] = useState([]);
   const [filteredAuctions, setFilteredAuctions] = useState([]);
@@ -159,17 +159,26 @@ const ViewAuctions = () => {
   };
 
   /**
-   * Handle edit auction
+   * Handle edit auction - Only admin can edit
    */
   const handleEditAuction = (auction) => {
+    if (currentUser?.role !== 'admin') {
+      alert('Only administrators can edit auctions');
+      return;
+    }
     setSelectedAuction(auction);
     setShowEditModal(true);
   };
 
   /**
-   * Handle delete auction with confirmation
+   * Handle delete auction with confirmation - Only admin can delete
    */
   const handleDeleteAuction = async (auction) => {
+    if (currentUser?.role !== 'admin') {
+      alert('Only administrators can delete auctions');
+      return;
+    }
+
     if (window.confirm(`Are you sure you want to delete auction "${auction.Title}"? This action cannot be undone.`)) {
       try {
         await deleteAuction(auction.id);
@@ -179,6 +188,17 @@ const ViewAuctions = () => {
         console.error('Error deleting auction:', err);
         alert('Failed to delete auction. Please try again.');
       }
+    }
+  };
+
+  /**
+   * Handle modal close with refresh check
+   */
+  const handleModalClose = (shouldRefresh = false) => {
+    setShowDetailsModal(false);
+    setSelectedAuction(null);
+    if (shouldRefresh) {
+      fetchAuctions();
     }
   };
 
@@ -210,6 +230,8 @@ const ViewAuctions = () => {
     };
   };
 
+ 
+
   // Pagination logic
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -224,7 +246,12 @@ const ViewAuctions = () => {
   return (
     <div className="view-auctions">
       <div className="view-auctions-header">
-        <h2>View Auctions</h2>
+        <h2>
+          View Auctions
+          {currentUser?.role === 'system_admin' && (
+            <span className="role-indicator"> (System Administrator)</span>
+          )}
+        </h2>
         <button 
           className="btn btn-refresh"
           onClick={fetchAuctions}
@@ -375,13 +402,14 @@ const ViewAuctions = () => {
                 <th>Time</th>
                 <th>Duration</th>
                 <th>Status</th>
+                {currentUser?.role === 'system_admin' && <th>Approval</th>}
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {currentItems.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="no-data">
+                  <td colSpan={currentUser?.role === 'system_admin' ? "10" : "9"} className="no-data">
                     {filteredAuctions.length === 0 && auctions.length > 0
                       ? 'No auctions match your filters'
                       : 'No auctions found'
@@ -406,6 +434,23 @@ const ViewAuctions = () => {
                           {(auction.calculated_status || auction.status || 'unknown').toUpperCase()}
                         </span>
                       </td>
+                      {currentUser?.role === 'system_admin' && (
+                        <td className="approval-info">
+                          {auction.approved_by && (
+                            <div className="approval-details">
+                              <small className="approved-by">✅ {auction.approved_by}</small>
+                            </div>
+                          )}
+                          {auction.rejected_by && (
+                            <div className="approval-details">
+                              <small className="rejected-by">❌ {auction.rejected_by}</small>
+                            </div>
+                          )}
+                          {!auction.approved_by && !auction.rejected_by && auction.calculated_status === 'pending' && (
+                            <span className="pending-approval">Pending Approval</span>
+                          )}
+                        </td>
+                      )}
                       <td className="actions-cell">
                         <div className="actions-buttons">
                           <button
@@ -415,22 +460,24 @@ const ViewAuctions = () => {
                           >
                             View
                           </button>
-                          <button
-                            className="btn btn-edit"
-                            onClick={() => handleEditAuction(auction)}
-                            title="Edit Auction"
-                            disabled={auction.calculated_status === 'live' || auction.calculated_status === 'ended'}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="btn btn-delete"
-                            onClick={() => handleDeleteAuction(auction)}
-                            title="Delete Auction"
-                            disabled={auction.calculated_status === 'live'}
-                          >
-                            Delete
-                          </button>
+                          
+                              <button
+                                className="btn btn-edit"
+                                onClick={() => handleEditAuction(auction)}
+                                title="Edit Auction"
+                                
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="btn btn-delete"
+                                onClick={() => handleDeleteAuction(auction)}
+                                title="Delete Auction"
+                                
+                              >
+                                Delete
+                              </button>
+                           
                         </div>
                       </td>
                     </tr>
@@ -479,10 +526,8 @@ const ViewAuctions = () => {
       {showDetailsModal && selectedAuction && (
         <AuctionDetailsModal
           auction={selectedAuction}
-          onClose={() => {
-            setShowDetailsModal(false);
-            setSelectedAuction(null);
-          }}
+          currentUser={currentUser}
+          onClose={handleModalClose}
         />
       )}
 
