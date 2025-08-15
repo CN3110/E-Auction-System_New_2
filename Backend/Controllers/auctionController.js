@@ -9,7 +9,7 @@ const getCurrentSLTime = () => {
 };
 
 
-// Helper function to get auction status
+// FIXED: Updated getAuctionStatus with proper timezone handling
 const getAuctionStatus = (auction) => {
   const nowSL = getCurrentSLTime();
   const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
@@ -31,6 +31,15 @@ const getAuctionStatus = (auction) => {
     }
   }
   
+  // For live status, check if it should end
+  if (auction.status === 'live') {
+    if (nowSL.isSameOrAfter(endDateTime)) {
+      return 'ended';
+    } else {
+      return 'live';
+    }
+  }
+  
   // For legacy auctions without approval workflow
   if (nowSL.isBefore(startDateTime)) {
     return 'pending';
@@ -41,7 +50,7 @@ const getAuctionStatus = (auction) => {
   }
 };
 
-// Updated createAuction function - REMOVED email sending (emails only sent on approval)
+// FIXED: Updated createAuction function - REMOVED email sending (emails only sent on approval)
 const createAuction = async (req, res) => {
   try {
     console.log('Create auction request received');
@@ -87,7 +96,7 @@ const createAuction = async (req, res) => {
       });
     }
 
-    // Validate auction date/time is in future (Sri Lanka time)
+    // FIXED: Validate auction date/time is in future (Sri Lanka time)
     const nowSL = getCurrentSLTime();
     const auctionDateTime = moment.tz(`${auction_date} ${start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
     
@@ -231,8 +240,7 @@ const createAuction = async (req, res) => {
   }
 };
 
-// Get live auction for current bidder - UPDATED for approval workflow
-// Updated getLiveAuction function with better debugging and timezone handling
+// FIXED: Updated getLiveAuction function with proper timezone handling and debugging
 const getLiveAuction = async (req, res) => {
   try {
     const bidderId = req.user.id;
@@ -241,11 +249,13 @@ const getLiveAuction = async (req, res) => {
     console.log('Getting live auctions for bidder:', bidderId);
     console.log('Current SL time:', nowSL.format('YYYY-MM-DD HH:mm:ss'));
 
-    // Get all APPROVED auctions the bidder is invited to
+    // FIXED: Get all APPROVED auctions the bidder is invited to with proper timezone conversion
     const { data: invitedAuctions, error } = await query(`
       SELECT a.*, 
              u.name as bidder_name,
-             u.user_id as bidder_user_id
+             u.user_id as bidder_user_id,
+             CONVERT_TZ(CONCAT(a.auction_date, ' ', a.start_time), '+00:00', '+05:30') as start_datetime_sl,
+             CONVERT_TZ(DATE_ADD(CONCAT(a.auction_date, ' ', a.start_time), INTERVAL a.duration_minutes MINUTE), '+00:00', '+05:30') as end_datetime_sl
       FROM auctions a
       JOIN auction_bidders ab ON a.id = ab.auction_id
       JOIN users u ON ab.bidder_id = u.id
@@ -271,21 +281,7 @@ const getLiveAuction = async (req, res) => {
       });
     }
 
-    // Debug each auction
-    invitedAuctions.forEach(auction => {
-      const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-      const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
-      const isLive = isAuctionLive(auction);
-      
-      console.log(`Auction ${auction.auction_id}:`);
-      console.log(`  - Status: ${auction.status}`);
-      console.log(`  - Start: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
-      console.log(`  - End: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
-      console.log(`  - Current: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
-      console.log(`  - Is Live: ${isLive}`);
-    });
-
-    // Filter for currently live auctions with proper timezone handling
+    // FIXED: Filter for currently live auctions with proper timezone handling
     const liveAuctions = invitedAuctions.filter(auction => {
       const liveStatus = isAuctionLive(auction);
       console.log(`Auction ${auction.auction_id} live status: ${liveStatus}`);
@@ -294,15 +290,31 @@ const getLiveAuction = async (req, res) => {
 
     console.log(`Found ${liveAuctions.length} live auctions`);
 
+    // Add calculated status and timing info to each auction
+    const enrichedLiveAuctions = liveAuctions.map(auction => {
+      const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+      const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+      const timeRemaining = endDateTime.diff(nowSL, 'milliseconds');
+      
+      return {
+        ...auction,
+        calculated_status: 'live',
+        is_live: true,
+        time_remaining_ms: Math.max(0, timeRemaining),
+        start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+        end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss')
+      };
+    });
+
     res.status(200).json({
       success: true,
-      count: liveAuctions.length,
-      auctions: liveAuctions,
+      count: enrichedLiveAuctions.length,
+      auctions: enrichedLiveAuctions,
       current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
       debug: {
         bidderId,
         totalInvitedAuctions: invitedAuctions.length,
-        liveAuctionCount: liveAuctions.length
+        liveAuctionCount: enrichedLiveAuctions.length
       }
     });
 
@@ -316,11 +328,13 @@ const getLiveAuction = async (req, res) => {
   }
 };
 
-// Helper function to check if auction is live
-// Updated isAuctionLive function with better debugging 
+
+// FIXED: Helper function to check if auction is live with proper timezone handling
 const isAuctionLive = (auction) => {
   try {
     const nowSL = getCurrentSLTime();
+    
+    // Create start and end times in Sri Lanka timezone
     const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
     const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
     
@@ -328,11 +342,11 @@ const isAuctionLive = (auction) => {
     const isApproved = auction.status === 'approved' || auction.status === 'live';
     const isWithinTimeRange = nowSL.isSameOrAfter(startDateTime) && nowSL.isBefore(endDateTime);
     
-    console.log(`isAuctionLive check for ${auction.auction_id}:`);
+    console.log(`isAuctionLive check for ${auction.auction_id || auction.id}:`);
     console.log(`  - Status: ${auction.status} (approved: ${isApproved})`);
-    console.log(`  - Now: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
-    console.log(`  - Start: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
-    console.log(`  - End: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+    console.log(`  - Now SL: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
+    console.log(`  - Start SL: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+    console.log(`  - End SL: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
     console.log(`  - Within time: ${isWithinTimeRange}`);
     console.log(`  - Final result: ${isApproved && isWithinTimeRange}`);
     
@@ -342,97 +356,6 @@ const isAuctionLive = (auction) => {
     return false;
   }
 };
-
-// Alternative query approach - you can try this if the above doesn't work
-/*const getLiveAuctionAlternative = async (req, res) => {
-  try {
-    const bidderId = req.user.id;
-    const nowSL = getCurrentSLTime();
-    
-    console.log('Alternative approach - Getting live auctions for bidder:', bidderId);
-
-    // More explicit query with time calculations
-    const { data: liveAuctions, error } = await query(`
-      SELECT a.*, 
-             ab.bidder_id,
-             CONCAT(a.auction_date, ' ', a.start_time) as start_datetime,
-             DATE_ADD(CONCAT(a.auction_date, ' ', a.start_time), INTERVAL a.duration_minutes MINUTE) as end_datetime,
-             NOW() as current_time,
-             CASE 
-               WHEN NOW() >= CONCAT(a.auction_date, ' ', a.start_time) 
-                    AND NOW() < DATE_ADD(CONCAT(a.auction_date, ' ', a.start_time), INTERVAL a.duration_minutes MINUTE)
-               THEN 1 
-               ELSE 0 
-             END as is_currently_live
-      FROM auctions a
-      JOIN auction_bidders ab ON a.id = ab.auction_id
-      WHERE ab.bidder_id = ? 
-        AND a.status IN ('approved', 'live')
-        AND NOW() >= CONCAT(a.auction_date, ' ', a.start_time)
-        AND NOW() < DATE_ADD(CONCAT(a.auction_date, ' ', a.start_time), INTERVAL a.duration_minutes MINUTE)
-      ORDER BY a.auction_date DESC, a.start_time DESC
-    `, [bidderId]);
-
-    if (error) {
-      console.error('Error in alternative query:', error);
-      throw error;
-    }
-
-    console.log('Alternative query results:', liveAuctions);
-
-    res.status(200).json({
-      success: true,
-      count: liveAuctions?.length || 0,
-      auctions: liveAuctions || [],
-      current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss')
-    });
-
-  } catch (err) {
-    console.error('Error in alternative live auction fetch:', err);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to fetch live auctions' 
-    });
-  }
-};
-
-// Test query to debug invitation relationships
-const debugBidderInvitations = async (req, res) => {
-  try {
-    const bidderId = req.user.id;
-    
-    const { data: allInvitations } = await query(`
-      SELECT 
-        ab.auction_id,
-        ab.bidder_id,
-        a.auction_id as auction_code,
-        a.title,
-        a.status,
-        a.auction_date,
-        a.start_time,
-        a.duration_minutes,
-        u.name as bidder_name,
-        u.user_id as bidder_user_id
-      FROM auction_bidders ab
-      JOIN auctions a ON ab.auction_id = a.id
-      JOIN users u ON ab.bidder_id = u.id
-      WHERE ab.bidder_id = ?
-      ORDER BY a.auction_date DESC, a.start_time DESC
-    `, [bidderId]);
-
-    console.log('All invitations for bidder:', allInvitations);
-
-    res.json({
-      success: true,
-      bidderId,
-      invitations: allInvitations
-    });
-
-  } catch (error) {
-    console.error('Debug error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};*/
 
 // Get all auctions (with filtering) - UPDATED for approval workflow
 const getAllAuctions = async (req, res) => {
@@ -508,14 +431,22 @@ const getAllAuctions = async (req, res) => {
   }
 };
 
-// Get live auctions for admin - FIXED TIMEZONE
+
+// FIXED: Get live auctions for admin with proper timezone handling
 const getAdminLiveAuctions = async (req, res) => {
   try {
     const nowSL = getCurrentSLTime();
+    console.log('Admin requesting live auctions at SL time:', nowSL.format('YYYY-MM-DD HH:mm:ss'));
 
-    const { data: auctions, error } = await query(
-      'SELECT * FROM auctions ORDER BY auction_date DESC, start_time DESC'
-    );
+    // FIXED: Get all auctions with timezone conversion
+    const { data: auctions, error } = await query(`
+      SELECT *,
+             CONVERT_TZ(CONCAT(auction_date, ' ', start_time), '+00:00', '+05:30') as start_datetime_sl,
+             CONVERT_TZ(DATE_ADD(CONCAT(auction_date, ' ', start_time), INTERVAL duration_minutes MINUTE), '+00:00', '+05:30') as end_datetime_sl
+      FROM auctions 
+      WHERE status IN ('approved', 'live')
+      ORDER BY auction_date DESC, start_time DESC
+    `);
 
     if (error) {
       console.error('Get admin live auctions error:', error);
@@ -525,10 +456,16 @@ const getAdminLiveAuctions = async (req, res) => {
       });
     }
 
-    // Filter for live auctions with proper timezone handling
+    console.log(`Found ${auctions?.length || 0} approved/live auctions`);
+
+    // FIXED: Filter for live auctions with proper timezone handling
     const liveAuctions = auctions.filter(auction => {
-      return isAuctionLive(auction);
+      const liveStatus = isAuctionLive(auction);
+      console.log(`Admin view - Auction ${auction.auction_id} live status: ${liveStatus}`);
+      return liveStatus;
     });
+
+    console.log(`Found ${liveAuctions.length} currently live auctions for admin`);
 
     // Add calculated status and time info
     const enrichedLiveAuctions = liveAuctions.map(auction => {
@@ -539,6 +476,7 @@ const getAdminLiveAuctions = async (req, res) => {
       return {
         ...auction,
         calculated_status: 'live',
+        is_live: true,
         time_remaining_ms: Math.max(0, timeRemaining),
         start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
         end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss')
@@ -561,11 +499,13 @@ const getAdminLiveAuctions = async (req, res) => {
   }
 };
 
-// Function to update auction statuses in database - UPDATED for approval workflow
+
+// FIXED: Function to update auction statuses in database with proper timezone
 const updateAuctionStatuses = async () => {
   try {
+    console.log('Updating auction statuses...');
     const { data: auctions, error } = await query(
-      'SELECT id, auction_date, start_time, duration_minutes, status FROM auctions WHERE status IN (?, ?, ?)',
+      'SELECT id, auction_id, auction_date, start_time, duration_minutes, status FROM auctions WHERE status IN (?, ?, ?)',
       ['approved', 'live', 'ended']
     );
     
@@ -575,6 +515,7 @@ const updateAuctionStatuses = async () => {
     }
 
     const nowSL = getCurrentSLTime();
+    console.log('Current SL time for status update:', nowSL.format('YYYY-MM-DD HH:mm:ss'));
 
     for (const auction of auctions) {
       let newStatus = auction.status;
@@ -604,7 +545,7 @@ const updateAuctionStatuses = async () => {
           'UPDATE auctions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
           [newStatus, auction.id]
         );
-        console.log(`Updated auction ${auction.id} status from ${auction.status} to ${newStatus}`);
+        console.log(`Updated auction ${auction.auction_id} status from ${auction.status} to ${newStatus}`);
       }
     }
   } catch (error) {
@@ -1691,23 +1632,21 @@ const getAuctionStatistics = async (req, res) => {
 };
 
 module.exports = {
-  createAuction,
-  getLiveAuction,
-  getAllAuctions,
-  getAuction,
-  getLiveRankings,
-  getAdminLiveAuctions,
-  getAdminAuctionRankings,
-  getAuctionResults,
-  getAllAuctionsAdmin,
-  updateAuctionStatuses, // Export for use in scheduler
-  getCurrentSLTime,
-  isAuctionLive,
-  getAuctionStatus,
-  approveAuction, //
-  rejectAuction,//
-  updateAuction,
-  deleteAuction,
-  getAuctionStatistics,
-  getAllAuctions,
+createAuction,
+getLiveAuction,
+isAuctionLive,
+getAuctionStatus,
+getAllAuctions,
+getAdminLiveAuctions,
+updateAuctionStatuses,
+getAuctionResults,
+getAuction,
+getLiveRankings,
+getAdminAuctionRankings,
+getAllAuctionsAdmin,
+approveAuction,
+rejectAuction,
+updateAuction,
+deleteAuction,
+getAuctionStatistics,
 };

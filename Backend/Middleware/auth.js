@@ -11,21 +11,29 @@ const authenticate = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Handle admin authentication (hardcoded admin)
+    // FIXED: Handle admin authentication with proper database UUID
     if (decoded.user_id === 'ADMIN') {
-      req.user = {
-        id: 'admin-hardcoded-id',
-        user_id: 'ADMIN',
-        name: 'Administrator',
-        email: 'admin@eauction.com',
-        role: 'admin',
-        company: 'Anunine Holdings Pvt Ltd',
-        is_active: true
-      };
+      // Get the actual admin user from database to get the real UUID
+      const { data: adminUser, error: adminError } = await query(
+        'SELECT * FROM users WHERE user_id = ? AND role = ? AND is_active = TRUE',
+        ['ADMIN', 'admin']
+      );
+
+      if (adminError || !adminUser || adminUser.length === 0) {
+        console.error('Admin user not found in database:', adminError);
+        return res.status(401).json({ 
+          success: false, 
+          error: 'Administrator not found' 
+        });
+      }
+
+      // Use the real database record, not hardcoded values
+      req.user = adminUser[0];
+      console.log('Admin authenticated with database ID:', req.user.id);
       return next();
     }
 
-    // Handle system admin authentication - GET THE REAL DATABASE ID
+    // FIXED: Handle system admin authentication - GET THE REAL DATABASE ID
     if (decoded.user_id === 'SYSADMIN') {
       // Get the actual system admin user from database to get the real UUID
       const { data: sysAdmin, error: sysAdminError } = await query(
@@ -43,6 +51,7 @@ const authenticate = async (req, res, next) => {
 
       // Use the real database record, not hardcoded values
       req.user = sysAdmin[0];
+      console.log('System admin authenticated with database ID:', req.user.id);
       return next();
     }
 
@@ -58,6 +67,7 @@ const authenticate = async (req, res, next) => {
     }
 
     req.user = users[0];
+    console.log('User authenticated:', req.user.user_id, 'with ID:', req.user.id);
     next();
   } catch (error) {
     console.error('Authentication error:', error.message);
