@@ -1961,6 +1961,14 @@ const getAuctionStatistics = async (req, res) => {
 
 module.exports = {
 createAuction,
+getAuction,
+updateAuction,
+deleteAuction,
+approveAuction,
+rejectAuction,
+getAllAuctionsAdmin,
+
+
 getLiveAuction,
 isAuctionLive,
 getAuctionStatus,
@@ -1971,11 +1979,9 @@ getAuctionResults,
 getAuction,
 getLiveRankings,
 getAdminAuctionRankings,
-getAllAuctionsAdmin,
-approveAuction,
-rejectAuction,
-updateAuction,
-deleteAuction,
+
+
+
 getAuctionStatistics,
 getCurrentSLTime,  // Add this line - it was missing
 };
