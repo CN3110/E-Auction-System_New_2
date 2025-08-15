@@ -24,7 +24,7 @@ const LiveAuction = () => {
   }, []);
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-LK', {
       style: 'currency',
       currency: 'LKR'
     }).format(amount);
@@ -39,7 +39,8 @@ const LiveAuction = () => {
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        hour12: true
+        hour12: true,
+        timeZone: 'Asia/Colombo' // Ensure Sri Lanka timezone
       });
     } catch (error) {
       console.error('Error formatting date:', error);
@@ -47,14 +48,27 @@ const LiveAuction = () => {
     }
   };
 
-  // Auction status check
+  // Updated auction status check with better debugging
   const isAuctionLive = useCallback((auctionItem) => {
-    if (!auctionItem) return false;
+    if (!auctionItem) {
+      console.log('No auction item provided');
+      return false;
+    }
     
     try {
+      // Create date objects using Sri Lanka timezone
       const now = new Date();
-      const auctionStart = new Date(`${auctionItem.auction_date}T${auctionItem.start_time}`);
+      const auctionStart = new Date(`${auctionItem.auction_date}T${auctionItem.start_time}+05:30`);
       const auctionEnd = new Date(auctionStart.getTime() + auctionItem.duration_minutes * 60000);
+      
+      console.log('Frontend auction live check:', {
+        auction_id: auctionItem.auction_id,
+        now: now.toISOString(),
+        start: auctionStart.toISOString(),
+        end: auctionEnd.toISOString(),
+        is_live: now >= auctionStart && now <= auctionEnd
+      });
+      
       return now >= auctionStart && now <= auctionEnd;
     } catch (error) {
       console.error('Error checking auction status:', error);
@@ -62,10 +76,12 @@ const LiveAuction = () => {
     }
   }, []);
 
-  // API functions
+  // Updated API function with better error handling and debugging
   const fetchLiveAuction = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
+      console.log('Fetching live auction with token:', token ? 'Token exists' : 'No token');
+      
       const response = await fetch('http://localhost:5000/api/auction/bidder/live', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -73,10 +89,21 @@ const LiveAuction = () => {
         }
       });
       
-      if (!response.ok) throw new Error('Failed to fetch live auction');
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Response error:', errorText);
+        throw new Error(`Failed to fetch live auction: ${response.status} ${response.statusText}`);
+      }
       
       const data = await response.json();
-      return Array.isArray(data.auctions) ? data.auctions : [];
+      console.log('API Response data:', data);
+      
+      const auctions = Array.isArray(data.auctions) ? data.auctions : [];
+      console.log('Processed auctions:', auctions);
+      
+      return auctions;
     } catch (error) {
       console.error('Error fetching live auction:', error);
       throw error;
@@ -84,125 +111,145 @@ const LiveAuction = () => {
   }, []);
 
   const placeBid = useCallback(async (auctionId, amount) => {
-  try {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`http://localhost:5000/api/bid/`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ 
-        amount: parseFloat(amount),
-        auction_id: auctionId  // Add auction_id to the request body
-      })
-    });
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/bid/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          amount: parseFloat(amount),
+          auction_id: auctionId
+        })
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to place bid');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error placing bid:', error);
-    throw error;
-  }
-}, []);
-
-  // Updated fetchBidderRank function to use correct API
-const fetchBidderRank = useCallback(async (auctionId) => {
-  try {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`http://localhost:5000/api/bid/rank?auction_id=${auctionId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to place bid');
       }
-    });
 
-    if (!response.ok) throw new Error('Failed to fetch bidder rank');
-
-    const data = await response.json();
-    return {
-      rank: data.rank,
-      totalBidders: data.totalBidders
-    };
-  } catch (error) {
-    console.error('Error fetching bidder rank:', error);
-    return { rank: null, totalBidders: 0 };
-  }
-}, []);
-
-// Updated fetchLatestBid function
-const fetchLatestBid = useCallback(async (auctionId) => {
-  try {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`http://localhost:5000/api/bid/latest?auction_id=${auctionId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) throw new Error('Failed to fetch latest bid');
-
-    const data = await response.json();
-    return data.bid;
-  } catch (error) {
-    console.error('Error fetching latest bid:', error);
-    return null;
-  }
-}, []);
-
-
-  // Updated fetchAuctionData function
-const fetchAuctionData = useCallback(async () => {
-  try {
-    setHasError(false);
-    const auctions = await fetchLiveAuction();
-    const liveAuction = auctions.find(auction => isAuctionLive(auction));
-    
-    if (!liveAuction) {
-      setAuction(null);
-      setBidderInfo({ rank: null, latestBid: null });
-      return;
+      return await response.json();
+    } catch (error) {
+      console.error('Error placing bid:', error);
+      throw error;
     }
+  }, []);
 
-    setAuction(liveAuction);
-    
-    // Fetch both rank and latest bid
-    const [rankData, latestBid] = await Promise.all([
-      fetchBidderRank(liveAuction.id),
-      fetchLatestBid(liveAuction.id)
-    ]);
-    
-    setBidderInfo({
-      rank: rankData?.rank || null,
-      latestBid: latestBid?.amount || null,
-      totalBidders: rankData?.totalBidders || 0
-    });
-  } catch (error) {
-    console.error('Error fetching auction data:', error);
-    setHasError(true);
-    showAlert('Error fetching auction data. Please try again.', 'danger');
-  } finally {
-    setInitialLoading(false);
-  }
-}, [fetchLiveAuction, fetchBidderRank, fetchLatestBid, isAuctionLive, showAlert]); 
+  const fetchBidderRank = useCallback(async (auctionId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/bid/rank?auction_id=${auctionId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
+      if (!response.ok) throw new Error('Failed to fetch bidder rank');
+
+      const data = await response.json();
+      return {
+        rank: data.rank,
+        totalBidders: data.totalBidders
+      };
+    } catch (error) {
+      console.error('Error fetching bidder rank:', error);
+      return { rank: null, totalBidders: 0 };
+    }
+  }, []);
+
+  const fetchLatestBid = useCallback(async (auctionId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/bid/latest?auction_id=${auctionId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch latest bid');
+
+      const data = await response.json();
+      return data.bid;
+    } catch (error) {
+      console.error('Error fetching latest bid:', error);
+      return null;
+    }
+  }, []);
+
+  // Updated fetchAuctionData with better debugging
+  const fetchAuctionData = useCallback(async () => {
+    try {
+      console.log('Fetching auction data...');
+      setHasError(false);
+      
+      const auctions = await fetchLiveAuction();
+      console.log('Received auctions:', auctions);
+      
+      if (!auctions || auctions.length === 0) {
+        console.log('No auctions received from API');
+        setAuction(null);
+        setBidderInfo({ rank: null, latestBid: null });
+        return;
+      }
+      
+      // Find the first live auction (assuming there should only be one live auction per bidder)
+      let liveAuction = null;
+      for (const auc of auctions) {
+        console.log(`Checking auction ${auc.auction_id} for live status`);
+        if (isAuctionLive(auc)) {
+          liveAuction = auc;
+          console.log(`Found live auction: ${auc.auction_id}`);
+          break;
+        }
+      }
+      
+      if (!liveAuction) {
+        console.log('No live auctions found from the available auctions');
+        setAuction(null);
+        setBidderInfo({ rank: null, latestBid: null });
+        return;
+      }
+
+      console.log('Setting live auction:', liveAuction);
+      setAuction(liveAuction);
+      
+      // Fetch both rank and latest bid
+      const [rankData, latestBid] = await Promise.all([
+        fetchBidderRank(liveAuction.id),
+        fetchLatestBid(liveAuction.id)
+      ]);
+      
+      setBidderInfo({
+        rank: rankData?.rank || null,
+        latestBid: latestBid?.amount || null,
+        totalBidders: rankData?.totalBidders || 0
+      });
+      
+    } catch (error) {
+      console.error('Error fetching auction data:', error);
+      setHasError(true);
+      showAlert(`Error fetching auction data: ${error.message}`, 'danger');
+    } finally {
+      setInitialLoading(false);
+    }
+  }, [fetchLiveAuction, fetchBidderRank, fetchLatestBid, isAuctionLive, showAlert]);
 
   const updateTimer = useCallback(() => {
     if (!auction) return;
 
     try {
       const now = new Date();
-      const auctionStart = new Date(`${auction.auction_date}T${auction.start_time}`);
+      const auctionStart = new Date(`${auction.auction_date}T${auction.start_time}+05:30`);
       const auctionEnd = new Date(auctionStart.getTime() + auction.duration_minutes * 60000);
       const timeRemaining = auctionEnd - now;
       
       if (timeRemaining <= 0) {
         setTimeLeft('00:00');
+        console.log('Auction ended, refreshing data...');
         fetchAuctionData(); // Refresh data when auction ends
       } else {
         const minutes = Math.floor(timeRemaining / 60000);
@@ -216,8 +263,12 @@ const fetchAuctionData = useCallback(async () => {
 
   // Effects
   useEffect(() => {
+    console.log('Initial data fetch on component mount');
     fetchAuctionData();
-    const interval = setInterval(fetchAuctionData, 30000); // Refresh every 30 seconds
+    const interval = setInterval(() => {
+      console.log('Periodic data refresh...');
+      fetchAuctionData();
+    }, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
   }, [fetchAuctionData]);
 
@@ -284,9 +335,19 @@ const fetchAuctionData = useCallback(async () => {
     return (
       <div className="live-auction">
         <Alert 
-          message="Failed to load auction data. Please try again later." 
+          message="Failed to load auction data. Please refresh the page or try again later." 
           type="danger" 
         />
+        <button 
+          className="btn btn-primary mt-3" 
+          onClick={() => {
+            setHasError(false);
+            setInitialLoading(true);
+            fetchAuctionData();
+          }}
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -296,9 +357,16 @@ const fetchAuctionData = useCallback(async () => {
       <div className="live-auction">
         <h2>Live Auction</h2>
         <Alert 
-          message="Currently there are no live auctions. Please check back later."
+          message="Currently there are no live auctions available to you. Please check back later or contact the administrator if you believe you should have access to a live auction."
           type="info"
         />
+        <button 
+          className="btn btn-outline-primary mt-3" 
+          onClick={() => fetchAuctionData()}
+          disabled={loading}
+        >
+          {loading ? 'Refreshing...' : 'Refresh'}
+        </button>
       </div>
     );
   }
@@ -374,6 +442,8 @@ const fetchAuctionData = useCallback(async () => {
           <Card title="Auction Details">
             <p><strong>Title:</strong> {auction.title}</p>
             <p><strong>Auction ID:</strong> {auction.auction_id}</p>
+            <p><strong>Category:</strong> {auction.category}</p>
+            <p><strong>SBU:</strong> {auction.sbu}</p>
             <p><strong>Start Time:</strong> {formatDateTime(auction.auction_date, auction.start_time)}</p>
             <p><strong>Duration:</strong> {auction.duration_minutes} minutes</p>
             <p>

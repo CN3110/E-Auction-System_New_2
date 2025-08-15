@@ -8,14 +8,6 @@ const getCurrentSLTime = () => {
   return moment().tz('Asia/Colombo');
 };
 
-// Helper function to check if auction is live
-const isAuctionLive = (auction) => {
-  const nowSL = getCurrentSLTime();
-  const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-  const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
-  
-  return nowSL.isBetween(startDateTime, endDateTime, null, '[]');
-};
 
 // Helper function to get auction status
 const getAuctionStatus = (auction) => {
@@ -240,39 +232,207 @@ const createAuction = async (req, res) => {
 };
 
 // Get live auction for current bidder - UPDATED for approval workflow
+// Updated getLiveAuction function with better debugging and timezone handling
 const getLiveAuction = async (req, res) => {
   try {
     const bidderId = req.user.id;
     const nowSL = getCurrentSLTime();
+    
+    console.log('Getting live auctions for bidder:', bidderId);
+    console.log('Current SL time:', nowSL.format('YYYY-MM-DD HH:mm:ss'));
 
     // Get all APPROVED auctions the bidder is invited to
     const { data: invitedAuctions, error } = await query(`
-      SELECT a.* FROM auctions a
+      SELECT a.*, 
+             u.name as bidder_name,
+             u.user_id as bidder_user_id
+      FROM auctions a
       JOIN auction_bidders ab ON a.id = ab.auction_id
+      JOIN users u ON ab.bidder_id = u.id
       WHERE ab.bidder_id = ? AND a.status IN ('approved', 'live')
+      ORDER BY a.auction_date DESC, a.start_time DESC
     `, [bidderId]);
 
     if (error) {
+      console.error('Error fetching invited auctions:', error);
       throw new Error('Error fetching invited auctions');
     }
 
+    console.log(`Found ${invitedAuctions?.length || 0} invited auctions for bidder ${bidderId}`);
+    
+    if (!invitedAuctions || invitedAuctions.length === 0) {
+      console.log('No invited auctions found for this bidder');
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        auctions: [],
+        current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
+        message: 'No invited auctions found'
+      });
+    }
+
+    // Debug each auction
+    invitedAuctions.forEach(auction => {
+      const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+      const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+      const isLive = isAuctionLive(auction);
+      
+      console.log(`Auction ${auction.auction_id}:`);
+      console.log(`  - Status: ${auction.status}`);
+      console.log(`  - Start: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+      console.log(`  - End: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+      console.log(`  - Current: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
+      console.log(`  - Is Live: ${isLive}`);
+    });
+
     // Filter for currently live auctions with proper timezone handling
     const liveAuctions = invitedAuctions.filter(auction => {
-      return isAuctionLive(auction);
+      const liveStatus = isAuctionLive(auction);
+      console.log(`Auction ${auction.auction_id} live status: ${liveStatus}`);
+      return liveStatus;
     });
+
+    console.log(`Found ${liveAuctions.length} live auctions`);
 
     res.status(200).json({
       success: true,
       count: liveAuctions.length,
       auctions: liveAuctions,
       current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
+      debug: {
+        bidderId,
+        totalInvitedAuctions: invitedAuctions.length,
+        liveAuctionCount: liveAuctions.length
+      }
     });
 
   } catch (err) {
     console.error('Error fetching live auctions:', err);
-    res.status(500).json({ success: false, error: 'Failed to fetch live auctions' });
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch live auctions',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
+
+// Helper function to check if auction is live
+// Updated isAuctionLive function with better debugging 
+const isAuctionLive = (auction) => {
+  try {
+    const nowSL = getCurrentSLTime();
+    const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+    
+    // Check if auction is approved and within time bounds
+    const isApproved = auction.status === 'approved' || auction.status === 'live';
+    const isWithinTimeRange = nowSL.isSameOrAfter(startDateTime) && nowSL.isBefore(endDateTime);
+    
+    console.log(`isAuctionLive check for ${auction.auction_id}:`);
+    console.log(`  - Status: ${auction.status} (approved: ${isApproved})`);
+    console.log(`  - Now: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
+    console.log(`  - Start: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+    console.log(`  - End: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+    console.log(`  - Within time: ${isWithinTimeRange}`);
+    console.log(`  - Final result: ${isApproved && isWithinTimeRange}`);
+    
+    return isApproved && isWithinTimeRange;
+  } catch (error) {
+    console.error('Error in isAuctionLive:', error);
+    return false;
+  }
+};
+
+// Alternative query approach - you can try this if the above doesn't work
+/*const getLiveAuctionAlternative = async (req, res) => {
+  try {
+    const bidderId = req.user.id;
+    const nowSL = getCurrentSLTime();
+    
+    console.log('Alternative approach - Getting live auctions for bidder:', bidderId);
+
+    // More explicit query with time calculations
+    const { data: liveAuctions, error } = await query(`
+      SELECT a.*, 
+             ab.bidder_id,
+             CONCAT(a.auction_date, ' ', a.start_time) as start_datetime,
+             DATE_ADD(CONCAT(a.auction_date, ' ', a.start_time), INTERVAL a.duration_minutes MINUTE) as end_datetime,
+             NOW() as current_time,
+             CASE 
+               WHEN NOW() >= CONCAT(a.auction_date, ' ', a.start_time) 
+                    AND NOW() < DATE_ADD(CONCAT(a.auction_date, ' ', a.start_time), INTERVAL a.duration_minutes MINUTE)
+               THEN 1 
+               ELSE 0 
+             END as is_currently_live
+      FROM auctions a
+      JOIN auction_bidders ab ON a.id = ab.auction_id
+      WHERE ab.bidder_id = ? 
+        AND a.status IN ('approved', 'live')
+        AND NOW() >= CONCAT(a.auction_date, ' ', a.start_time)
+        AND NOW() < DATE_ADD(CONCAT(a.auction_date, ' ', a.start_time), INTERVAL a.duration_minutes MINUTE)
+      ORDER BY a.auction_date DESC, a.start_time DESC
+    `, [bidderId]);
+
+    if (error) {
+      console.error('Error in alternative query:', error);
+      throw error;
+    }
+
+    console.log('Alternative query results:', liveAuctions);
+
+    res.status(200).json({
+      success: true,
+      count: liveAuctions?.length || 0,
+      auctions: liveAuctions || [],
+      current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss')
+    });
+
+  } catch (err) {
+    console.error('Error in alternative live auction fetch:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch live auctions' 
+    });
+  }
+};
+
+// Test query to debug invitation relationships
+const debugBidderInvitations = async (req, res) => {
+  try {
+    const bidderId = req.user.id;
+    
+    const { data: allInvitations } = await query(`
+      SELECT 
+        ab.auction_id,
+        ab.bidder_id,
+        a.auction_id as auction_code,
+        a.title,
+        a.status,
+        a.auction_date,
+        a.start_time,
+        a.duration_minutes,
+        u.name as bidder_name,
+        u.user_id as bidder_user_id
+      FROM auction_bidders ab
+      JOIN auctions a ON ab.auction_id = a.id
+      JOIN users u ON ab.bidder_id = u.id
+      WHERE ab.bidder_id = ?
+      ORDER BY a.auction_date DESC, a.start_time DESC
+    `, [bidderId]);
+
+    console.log('All invitations for bidder:', allInvitations);
+
+    res.json({
+      success: true,
+      bidderId,
+      invitations: allInvitations
+    });
+
+  } catch (error) {
+    console.error('Debug error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};*/
 
 // Get all auctions (with filtering) - UPDATED for approval workflow
 const getAllAuctions = async (req, res) => {
