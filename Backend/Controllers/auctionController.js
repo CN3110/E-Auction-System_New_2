@@ -395,26 +395,38 @@ const getLiveAuction = async (req, res) => {
   }
 };
 
-// FIXED: Updated isAuctionLive function with proper date parsing
+// FIXED: Updated isAuctionLive function with null safety
 const isAuctionLive = (auction) => {
   try {
     const nowSL = getCurrentSLTime();
     
-    // FIXED: Ensure proper date/time format for parsing
+    // FIXED: Add null/undefined checks
+    if (!auction || !auction.auction_date || !auction.start_time) {
+      console.log(`isAuctionLive: Missing required auction data`);
+      console.log(`  - auction_date: ${auction?.auction_date}`);
+      console.log(`  - start_time: ${auction?.start_time}`);
+      return false;
+    }
+    
+    // Handle different date formats from database
     let auctionDate = auction.auction_date;
     let auctionTime = auction.start_time;
     
-    // Handle different date formats from database
+    // Handle date objects
     if (auctionDate instanceof Date) {
       auctionDate = moment(auctionDate).format('YYYY-MM-DD');
     }
     
+    // Convert to string if not already
+    auctionDate = String(auctionDate);
+    auctionTime = String(auctionTime);
+    
     // Handle time format - remove milliseconds if present
-    if (typeof auctionTime === 'string' && auctionTime.includes('.')) {
-      auctionTime = auctionTime.split('.')[0]; // Remove milliseconds
+    if (auctionTime.includes('.')) {
+      auctionTime = auctionTime.split('.')[0];
     }
     
-    // Create datetime string in proper format
+    // Create datetime string
     const dateTimeString = `${auctionDate} ${auctionTime}`;
     
     console.log(`isAuctionLive debug for ${auction.auction_id || auction.id}:`);
@@ -422,58 +434,40 @@ const isAuctionLive = (auction) => {
     console.log(`  - Raw start_time: ${auction.start_time} (type: ${typeof auction.start_time})`);
     console.log(`  - Formatted dateTimeString: ${dateTimeString}`);
     
-    // FIXED: Use proper moment parsing with explicit format
-    const startDateTime = moment.tz(dateTimeString, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    // Try primary parsing method
+    let startDateTime = moment.tz(dateTimeString, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
     
-    // Validate the parsing worked
     if (!startDateTime.isValid()) {
-      console.error(`  - ERROR: Invalid datetime parsing for ${dateTimeString}`);
-      console.error(`  - Trying alternative parsing methods...`);
+      console.log(`  - Primary parsing failed, trying alternative methods...`);
       
-      // Alternative parsing method 1: Direct construction
-      const altStart1 = moment.tz(auctionDate + 'T' + auctionTime, 'Asia/Colombo');
-      if (altStart1.isValid()) {
-        console.log(`  - Alternative parsing 1 SUCCESS: ${altStart1.format()}`);
-        const altEnd1 = altStart1.clone().add(auction.duration_minutes, 'minutes');
-        const isWithinTime = nowSL.isBetween(altStart1, altEnd1, null, '[]');
-        const isApproved = auction.status === 'approved' || auction.status === 'live';
-        console.log(`  - Status: ${auction.status} (approved: ${isApproved})`);
-        console.log(`  - Now SL: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
-        console.log(`  - Start SL: ${altStart1.format('YYYY-MM-DD HH:mm:ss')}`);
-        console.log(`  - End SL: ${altEnd1.format('YYYY-MM-DD HH:mm:ss')}`);
-        console.log(`  - Within time: ${isWithinTime}`);
-        console.log(`  - Final result: ${isApproved && isWithinTime}`);
-        return isApproved && isWithinTime;
-      }
-      
-      // Alternative parsing method 2: Parse separately
+      // Alternative method 1: Parse date and time separately
       const datePart = moment.tz(auctionDate, 'YYYY-MM-DD', 'Asia/Colombo');
-      const [hours, minutes, seconds = 0] = auctionTime.split(':').map(Number);
-      const altStart2 = datePart.clone().hour(hours).minute(minutes).second(seconds);
+      const timeParts = auctionTime.split(':');
       
-      if (altStart2.isValid()) {
-        console.log(`  - Alternative parsing 2 SUCCESS: ${altStart2.format()}`);
-        const altEnd2 = altStart2.clone().add(auction.duration_minutes, 'minutes');
-        const isWithinTime = nowSL.isBetween(altStart2, altEnd2, null, '[]');
-        const isApproved = auction.status === 'approved' || auction.status === 'live';
-        console.log(`  - Status: ${auction.status} (approved: ${isApproved})`);
-        console.log(`  - Now SL: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
-        console.log(`  - Start SL: ${altStart2.format('YYYY-MM-DD HH:mm:ss')}`);
-        console.log(`  - End SL: ${altEnd2.format('YYYY-MM-DD HH:mm:ss')}`);
-        console.log(`  - Within time: ${isWithinTime}`);
-        console.log(`  - Final result: ${isApproved && isWithinTime}`);
-        return isApproved && isWithinTime;
+      if (timeParts.length < 2) {
+        console.log(`  - Invalid time format: ${auctionTime}`);
+        return false;
       }
       
-      console.error(`  - All parsing methods failed for auction ${auction.auction_id || auction.id}`);
-      return false;
+      const hours = parseInt(timeParts[0]) || 0;
+      const minutes = parseInt(timeParts[1]) || 0;
+      const seconds = parseInt(timeParts[2]) || 0;
+      
+      startDateTime = datePart.clone().hour(hours).minute(minutes).second(seconds);
+      
+      if (!startDateTime.isValid()) {
+        console.log(`  - Alternative parsing also failed`);
+        return false;
+      } else {
+        console.log(`  - Alternative parsing SUCCESS: ${startDateTime.format()}`);
+      }
     }
     
-    const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+    const endDateTime = startDateTime.clone().add(auction.duration_minutes || 0, 'minutes');
     
     // Check if auction is approved and within time bounds
     const isApproved = auction.status === 'approved' || auction.status === 'live';
-    const isWithinTimeRange = nowSL.isBetween(startDateTime, endDateTime, null, '[]'); // '[]' means inclusive of both boundaries
+    const isWithinTimeRange = nowSL.isBetween(startDateTime, endDateTime, null, '[]');
     
     console.log(`  - Status: ${auction.status} (approved: ${isApproved})`);
     console.log(`  - Now SL: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
@@ -489,75 +483,301 @@ const isAuctionLive = (auction) => {
   }
 };
 
-// ALSO FIX: Update the getAuctionStatus function with the same parsing fix
+// FIXED: Updated getAuctionStatus with null safety
 const getAuctionStatus = (auction) => {
-  const nowSL = getCurrentSLTime();
-  
-  // Handle date/time parsing the same way
-  let auctionDate = auction.auction_date;
-  let auctionTime = auction.start_time;
-  
-  if (auctionDate instanceof Date) {
-    auctionDate = moment(auctionDate).format('YYYY-MM-DD');
-  }
-  
-  if (typeof auctionTime === 'string' && auctionTime.includes('.')) {
-    auctionTime = auctionTime.split('.')[0];
-  }
-  
-  // Try to parse the datetime
-  let startDateTime;
-  const dateTimeString = `${auctionDate} ${auctionTime}`;
-  startDateTime = moment.tz(dateTimeString, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-  
-  if (!startDateTime.isValid()) {
-    // Fallback parsing
-    const datePart = moment.tz(auctionDate, 'YYYY-MM-DD', 'Asia/Colombo');
-    const [hours, minutes, seconds = 0] = auctionTime.split(':').map(Number);
-    startDateTime = datePart.clone().hour(hours).minute(minutes).second(seconds);
-  }
-  
-  if (!startDateTime.isValid()) {
-    console.error(`Cannot parse auction datetime: ${dateTimeString}`);
-    return 'error';
-  }
-  
-  const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
-  
-  // If auction is rejected or still pending approval
-  if (auction.status === 'rejected' || auction.status === 'pending') {
-    return auction.status;
-  }
-  
-  // Only check time-based status if auction is approved
-  if (auction.status === 'approved') {
+  try {
+    const nowSL = getCurrentSLTime();
+    
+    // FIXED: Add null/undefined checks
+    if (!auction || !auction.auction_date || !auction.start_time) {
+      console.log(`getAuctionStatus: Missing required auction data`);
+      console.log(`  - auction_date: ${auction?.auction_date}`);
+      console.log(`  - start_time: ${auction?.start_time}`);
+      return 'error';
+    }
+    
+    // Handle date/time parsing the same way
+    let auctionDate = auction.auction_date;
+    let auctionTime = auction.start_time;
+    
+    if (auctionDate instanceof Date) {
+      auctionDate = moment(auctionDate).format('YYYY-MM-DD');
+    }
+    
+    // Convert to string if not already
+    auctionDate = String(auctionDate);
+    auctionTime = String(auctionTime);
+    
+    if (auctionTime.includes('.')) {
+      auctionTime = auctionTime.split('.')[0];
+    }
+    
+    // Try to parse the datetime
+    let startDateTime;
+    const dateTimeString = `${auctionDate} ${auctionTime}`;
+    startDateTime = moment.tz(dateTimeString, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    
+    if (!startDateTime.isValid()) {
+      // Fallback parsing
+      const datePart = moment.tz(auctionDate, 'YYYY-MM-DD', 'Asia/Colombo');
+      const timeParts = auctionTime.split(':');
+      
+      if (timeParts.length < 2) {
+        console.error(`Invalid time format in getAuctionStatus: ${auctionTime}`);
+        return 'error';
+      }
+      
+      const hours = parseInt(timeParts[0]) || 0;
+      const minutes = parseInt(timeParts[1]) || 0;
+      const seconds = parseInt(timeParts[2]) || 0;
+      
+      startDateTime = datePart.clone().hour(hours).minute(minutes).second(seconds);
+    }
+    
+    if (!startDateTime.isValid()) {
+      console.error(`Cannot parse auction datetime: ${dateTimeString}`);
+      return 'error';
+    }
+    
+    const endDateTime = startDateTime.clone().add(auction.duration_minutes || 0, 'minutes');
+    
+    // If auction is rejected or still pending approval
+    if (auction.status === 'rejected' || auction.status === 'pending') {
+      return auction.status;
+    }
+    
+    // Only check time-based status if auction is approved
+    if (auction.status === 'approved') {
+      if (nowSL.isBefore(startDateTime)) {
+        return 'approved'; // Keep as approved until start time
+      } else if (nowSL.isBetween(startDateTime, endDateTime, null, '[]')) {
+        return 'live';
+      } else {
+        return 'ended';
+      }
+    }
+    
+    // For live status, check if it should end
+    if (auction.status === 'live') {
+      if (nowSL.isSameOrAfter(endDateTime)) {
+        return 'ended';
+      } else {
+        return 'live';
+      }
+    }
+    
+    // For legacy auctions without approval workflow
     if (nowSL.isBefore(startDateTime)) {
-      return 'approved'; // Keep as approved until start time
+      return 'pending';
     } else if (nowSL.isBetween(startDateTime, endDateTime, null, '[]')) {
       return 'live';
     } else {
       return 'ended';
     }
-  }
-  
-  // For live status, check if it should end
-  if (auction.status === 'live') {
-    if (nowSL.isSameOrAfter(endDateTime)) {
-      return 'ended';
-    } else {
-      return 'live';
-    }
-  }
-  
-  // For legacy auctions without approval workflow
-  if (nowSL.isBefore(startDateTime)) {
-    return 'pending';
-  } else if (nowSL.isBetween(startDateTime, endDateTime, null, '[]')) {
-    return 'live';
-  } else {
-    return 'ended';
+  } catch (error) {
+    console.error('Error in getAuctionStatus:', error);
+    return 'error';
   }
 };
+
+// FIXED: Updated getAuction function with better error handling
+const getAuction = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+    console.log('Getting auction details for:', auctionId);
+
+    // STEP 1: Get basic auction details
+    const { data: auction, error: auctionError } = await query(`
+      SELECT 
+        a.id,
+        a.auction_id,
+        a.title,
+        a.status,
+        a.auction_date,
+        a.start_time,
+        a.duration_minutes,
+        a.created_by,
+        a.created_at,
+        a.special_notices,
+        a.sbu,
+        a.category,
+        a.updated_at,
+        a.approved_by,
+        a.approved_at,
+        a.rejected_by,
+        a.rejected_at,
+        a.rejection_reason
+      FROM auctions a
+      WHERE a.auction_id = ? OR a.id = ?
+    `, [auctionId, auctionId]);
+
+    if (auctionError) {
+      console.error('Error fetching auction:', auctionError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch auction details'
+      });
+    }
+
+    if (!auction || auction.length === 0) {
+      console.log('Auction not found:', auctionId);
+      return res.status(404).json({
+        success: false,
+        error: 'Auction not found'
+      });
+    }
+
+    const auctionData = auction[0];
+    console.log('Found auction:', auctionData.auction_id);
+    console.log('Auction raw data:', {
+      auction_date: auctionData.auction_date,
+      start_time: auctionData.start_time,
+      duration_minutes: auctionData.duration_minutes,
+      status: auctionData.status
+    });
+
+    // STEP 2: Get invited bidders separately
+    const { data: invitedBidders, error: biddersError } = await query(`
+      SELECT 
+        u.id as bidder_id,
+        u.user_id,
+        u.name,
+        u.company,
+        u.email,
+        u.phone,
+        ab.invited_at
+      FROM auction_bidders ab
+      JOIN users u ON ab.bidder_id = u.id
+      WHERE ab.auction_id = ?
+      ORDER BY u.name
+    `, [auctionData.id]);
+
+    if (biddersError) {
+      console.error('Error fetching invited bidders:', biddersError);
+      auctionData.invited_bidders = [];
+    } else {
+      auctionData.invited_bidders = invitedBidders || [];
+    }
+
+    // STEP 3: Get bid statistics
+    const { data: bidStats, error: bidStatsError } = await query(`
+      SELECT 
+        COUNT(*) as total_bids,
+        MIN(amount) as lowest_bid,
+        MAX(amount) as highest_bid,
+        AVG(amount) as average_bid
+      FROM bids 
+      WHERE auction_id = ?
+    `, [auctionData.id]);
+
+    if (!bidStatsError && bidStats && bidStats.length > 0) {
+      auctionData.total_bids = bidStats[0].total_bids || 0;
+      auctionData.lowest_bid = bidStats[0].lowest_bid;
+      auctionData.highest_bid = bidStats[0].highest_bid;
+      auctionData.average_bid = bidStats[0].average_bid;
+    } else {
+      auctionData.total_bids = 0;
+      auctionData.lowest_bid = null;
+      auctionData.highest_bid = null;
+      auctionData.average_bid = null;
+    }
+
+    // STEP 4: Get auction results (if ended)
+    const { data: auctionResults, error: resultsError } = await query(`
+      SELECT 
+        ar.winner_id,
+        ar.winning_amount,
+        ar.ended_at,
+        u.user_id as winner_user_id,
+        u.name as winner_name
+      FROM auction_results ar
+      LEFT JOIN users u ON ar.winner_id = u.id
+      WHERE ar.auction_id = ?
+      LIMIT 1
+    `, [auctionData.id]);
+
+    if (!resultsError && auctionResults && auctionResults.length > 0) {
+      auctionData.result_info = {
+        winner_id: auctionResults[0].winner_id,
+        winner_user_id: auctionResults[0].winner_user_id,
+        winner_name: auctionResults[0].winner_name,
+        winning_amount: auctionResults[0].winning_amount,
+        ended_at: auctionResults[0].ended_at
+      };
+    } else {
+      auctionData.result_info = null;
+    }
+
+    // STEP 5: Add calculated status and timing info with proper error handling
+    try {
+      console.log('Calculating auction status...');
+      auctionData.calculated_status = getAuctionStatus(auctionData);
+      console.log('Calculated status:', auctionData.calculated_status);
+      
+      auctionData.is_live = isAuctionLive(auctionData);
+      console.log('Is live:', auctionData.is_live);
+      
+      // Add formatted datetime for easier frontend consumption
+      if (auctionData.auction_date && auctionData.start_time) {
+        const startDateTime = moment.tz(`${auctionData.auction_date} ${auctionData.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+        
+        if (startDateTime.isValid()) {
+          const endDateTime = startDateTime.clone().add(auctionData.duration_minutes || 0, 'minutes');
+          
+          auctionData.start_datetime_formatted = startDateTime.format('YYYY-MM-DD HH:mm:ss');
+          auctionData.end_datetime_formatted = endDateTime.format('YYYY-MM-DD HH:mm:ss');
+          auctionData.date_time = `${auctionData.auction_date} ${auctionData.start_time}`;
+          
+          if (auctionData.is_live) {
+            const nowSL = getCurrentSLTime();
+            auctionData.time_remaining_ms = Math.max(0, endDateTime.diff(nowSL, 'milliseconds'));
+          }
+        } else {
+          console.error('Invalid datetime for formatting:', `${auctionData.auction_date} ${auctionData.start_time}`);
+          auctionData.start_datetime_formatted = null;
+          auctionData.end_datetime_formatted = null;
+          auctionData.date_time = `${auctionData.auction_date} ${auctionData.start_time}`;
+        }
+      } else {
+        console.error('Missing date/time data for auction:', auctionData.auction_id);
+        auctionData.start_datetime_formatted = null;
+        auctionData.end_datetime_formatted = null;
+        auctionData.date_time = null;
+      }
+      
+    } catch (statusError) {
+      console.error('Error calculating auction status:', statusError);
+      auctionData.calculated_status = auctionData.status;
+      auctionData.is_live = false;
+      auctionData.start_datetime_formatted = null;
+      auctionData.end_datetime_formatted = null;
+    }
+
+    console.log(`Auction details prepared for ${auctionData.auction_id}:`, {
+      status: auctionData.status,
+      calculated_status: auctionData.calculated_status,
+      is_live: auctionData.is_live,
+      invited_bidders_count: auctionData.invited_bidders.length,
+      total_bids: auctionData.total_bids
+    });
+
+    res.json({
+      success: true,
+      auction: auctionData,
+      current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
+    });
+
+  } catch (error) {
+    console.error('Get auction error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+
 
 // Get all auctions (with filtering) - UPDATED for approval workflow
 const getAllAuctions = async (req, res) => {
@@ -884,101 +1104,7 @@ const getAuctionResults = async (req, res) => {
   }
 };
 
-// view auctions by auction ID - selected auction ID 
-const getAuction = async (req, res) => {
-  try {
-    const { auctionId } = req.params;
 
-    const { data: auction, error } = await query(`
-      SELECT 
-        a.id,
-        a.auction_id,
-        a.title,
-        a.status,
-        CONCAT(a.auction_date, ' ', a.start_time) AS date_time,
-        a.duration_minutes AS duration,
-        a.created_by,
-        a.created_at,
-        a.special_notices,
-        a.sbu,
-        a.category,
-        a.updated_at,
-        GROUP_CONCAT(
-          JSON_OBJECT(
-            'bidder_id', ab.bidder_id,
-            'name', u.name,
-            'company', u.company,
-            'email', u.email,
-            'phone', u.phone
-          )
-        ) AS invited_bidders,
-        (
-          SELECT COUNT(*) 
-          FROM bids b 
-          WHERE b.auction_id = a.id
-        ) AS total_bids,
-        (
-          SELECT MAX(amount) 
-          FROM bids b 
-          WHERE b.auction_id = a.id
-        ) AS highest_bid,
-        (
-          SELECT JSON_OBJECT(
-            'winner_id', ar.winner_id,
-            'winning_amount', ar.winning_amount,
-            'ended_at', ar.ended_at
-          )
-          FROM auction_results ar
-          WHERE ar.auction_id = a.id
-          LIMIT 1
-        ) AS result_info
-      FROM 
-        auctions a
-      LEFT JOIN 
-        auction_bidders ab ON a.id = ab.auction_id
-      LEFT JOIN 
-        users u ON ab.bidder_id = u.id
-      WHERE 
-        a.auction_id = ?
-      GROUP BY 
-        a.id
-    `, [auctionId]);
-
-    if (error || !auction || auction.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Auction not found'
-      });
-    }
-
-    const auctionData = auction[0];
-    
-    // Parse JSON fields
-    if (auctionData.invited_bidders) {
-      auctionData.invited_bidders = JSON.parse(`[${auctionData.invited_bidders}]`);
-    }
-    if (auctionData.result_info) {
-      auctionData.result_info = JSON.parse(auctionData.result_info);
-    }
-
-    // Add calculated status and timing info
-    auctionData.calculated_status = getAuctionStatus(auctionData);
-    auctionData.is_live = isAuctionLive(auctionData);
-
-    res.json({
-      success: true,
-      auction: auctionData,
-      current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
-    });
-
-  } catch (error) {
-    console.error('Get auction error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-};
 
 const getLiveRankings = async (req, res) => {
   try {
