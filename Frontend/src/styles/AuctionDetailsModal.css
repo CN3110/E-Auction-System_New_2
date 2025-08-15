@@ -855,3 +855,367 @@
 .modal-footer .btn-reject:hover {
   background-color: #c82333;
 }
+
+/* Add these styles to your existing AuctionDetailsModal.css file */
+
+/* Admin Badge */
+.admin-badge {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* System Admin Action Banner */
+.admin-action-banner {
+  background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
+  border: 2px solid #fdcb6e;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(253, 203, 110, 0.3);
+  animation: pulseGlow 2s infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 4px 12px rgba(253, 203, 110, 0.3); }
+  50% { box-shadow: 0 6px 20px rgba(253, 203, 110, 0.5); }
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.banner-icon {
+  font-size: 1.5rem;
+  animation: bounce 1s infinite;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-5px); }
+  60% { transform: translateY(-3px); }
+}
+
+.banner-text {
+  color: #2d3436;
+  font-weight: 500;
+}
+
+.banner-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-small {
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  border-radius: 6px;
+}
+
+/* Enhanced Button Styles */
+.btn-approve {
+  background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
+  color: white;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.btn-approve:hover:not(:disabled) {
+  background: linear-gradient(135deg, #00a085 0%, #008f76 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 184, 148, 0.4);
+}
+
+.btn-reject {
+  background: linear-gradient(135deg, #e17055 0%, #d63031 100%);
+  color: white;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.btn-reject:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d63031 0%, #c0392b 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(214, 48, 49, 0.4);
+}
+
+/* Enhanced Approval Banner */
+.approval-banner {
+  padding: 16px;
+  margin: 16px 0;
+  border-radius: 8px;
+  border-left: 5px solid;
+}
+
+.approval-banner.approved {
+  background: linear-gradient(135deg, #d5f5d0 0%, #c8e6c0 100%);
+  border-left-color: #00b894;
+  color: #2d3436;
+}
+
+.approval-banner.rejected {
+  background: linear-gradient(135deg, #ffeaea 0%, #ffdddd 100%);
+  border-left-color: #e17055;
+  color: #2d3436;
+}
+
+.approval-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.approval-icon {
+  font-size: 1.2rem;
+  margin-top: 2px;
+}
+
+.rejection-reason {
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(214, 48, 49, 0.1);
+  border-radius: 4px;
+  font-style: italic;
+}
+
+/* Enhanced Reject Modal */
+.reject-modal {
+  max-width: 500px;
+  width: 90%;
+}
+
+.rejection-form {
+  margin: 16px 0;
+}
+
+.rejection-form p {
+  margin: 8px 0;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+.rejection-form hr {
+  margin: 16px 0;
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #ddd, transparent);
+}
+
+.rejection-form label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #2d3436;
+}
+
+.required {
+  color: #e17055;
+  font-weight: bold;
+}
+
+.rejection-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  resize: vertical;
+  transition: border-color 0.3s ease;
+}
+
+.rejection-textarea:focus {
+  outline: none;
+  border-color: #0984e3;
+  box-shadow: 0 0 0 3px rgba(9, 132, 227, 0.1);
+}
+
+.rejection-textarea::placeholder {
+  color: #999;
+}
+
+.help-text {
+  display: block;
+  margin-top: 6px;
+  color: #666;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+/* Status Badge Enhancements */
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-block;
+}
+
+.status-pending {
+  background: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%);
+  color: white;
+  animation: pendingPulse 2s infinite;
+}
+
+@keyframes pendingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.status-approved {
+  background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
+  color: white;
+}
+
+.status-rejected {
+  background: linear-gradient(135deg, #e17055 0%, #d63031 100%);
+  color: white;
+}
+
+.status-live {
+  background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%);
+  color: white;
+  animation: livePulse 1.5s infinite;
+}
+
+@keyframes livePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.status-ended {
+  background: linear-gradient(135deg, #636e72 0%, #2d3436 100%);
+  color: white;
+}
+
+/* Modal Enhancements */
+.modal-backdrop {
+  z-index: 1000;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 2px solid #eee;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-content h2 {
+  margin: 0;
+  color: #2d3436;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.close-button:hover {
+  background: #e17055;
+  color: white;
+  transform: rotate(90deg);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .admin-action-banner {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .banner-actions {
+    justify-content: center;
+  }
+  
+  .reject-modal {
+    width: 95%;
+    margin: 10px;
+  }
+  
+  .rejection-textarea {
+    min-height: 80px;
+  }
+}
+
+/* Loading and Error States */
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #0984e3;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+.error {
+  text-align: center;
+  padding: 40px;
+}
+
+.error-content {
+  color: #e17055;
+}
+
+.btn-retry {
+  background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 16px;
+  transition: all 0.3s ease;
+}
+
+.btn-retry:hover {
+  background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+  transform: translateY(-2px);
+}

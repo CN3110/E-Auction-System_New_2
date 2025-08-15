@@ -49,7 +49,7 @@ const getAuctionStatus = (auction) => {
   }
 };
 
-//create auction fuction 
+// Updated createAuction function - REMOVED email sending (emails only sent on approval)
 const createAuction = async (req, res) => {
   try {
     console.log('Create auction request received');
@@ -150,14 +150,8 @@ const createAuction = async (req, res) => {
     
     // Create auction with transaction
     const result = await transaction(async (connection) => {
-      // Insert auction - Updated to match your database schema
-      const initialStatus = getAuctionStatus({ 
-        auction_date, 
-        start_time, 
-        duration_minutes 
-      });
-      
-      console.log('Inserting auction with status:', initialStatus);
+      // Insert auction - All new auctions start as 'pending' and need approval
+      console.log('Creating auction with pending status for approval workflow');
       
       const [auctionResult] = await connection.execute(
         `INSERT INTO auctions (
@@ -179,15 +173,14 @@ const createAuction = async (req, res) => {
           start_time, 
           duration_minutes, 
           special_notices || null, 
-          initialStatus,
+          'pending', // All new auctions start as pending
           category,
           sbu,
-          created_by_name // Using created_by_name instead of req.user.id as per your schema
+          created_by_name
         ]
       );
 
       console.log('Auction inserted with result:', auctionResult);
-      const auctionDbId = auctionResult.insertId;
       
       // Get the created auction using the UUID id
       const [createdAuction] = await connection.execute(
@@ -201,7 +194,7 @@ const createAuction = async (req, res) => {
 
       console.log('Retrieved created auction:', createdAuction[0]);
 
-      // Add selected bidders - using the UUID id from the created auction
+      // Add selected bidders
       const auctionUUID = createdAuction[0].id;
       const bidderInvites = selected_bidders.map(bidderId => [auctionUUID, bidderId]);
       
@@ -225,58 +218,15 @@ const createAuction = async (req, res) => {
       throw result.error;
     }
     
-    console.log('Transaction completed successfully:', result.data);
+    console.log('Auction created successfully and is pending approval:', result.data);
     
-    // Send emails to selected bidders
-    try {
-      const { data: bidders, error: biddersError } = await query(
-        `SELECT email, name FROM users WHERE id IN (${selected_bidders.map(() => '?').join(',')}) AND role = 'bidder' AND is_active = TRUE`,
-        selected_bidders
-      );
-      
-      if (biddersError) {
-        console.error('Error fetching bidders for email:', biddersError);
-      } else if (bidders && bidders.length > 0) {
-        // Format date/time for email in Sri Lanka timezone
-        const formattedDateTime = moment.tz(`${auction_date} ${start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo')
-          .format('MMMM DD, YYYY at hh:mm A');
-        
-        const emailPromises = bidders.map(async (bidder) => {
-          const emailHTML = `
-            <h2>Auction Invitation - Anunine Holdings Pvt Ltd</h2>
-            <p>Dear ${bidder.name},</p>
-            <p>You've been invited to participate in a new auction:</p>
-            <p><strong>Title:</strong> ${title}</p>
-            <p><strong>Category:</strong> ${category}</p>
-            <p><strong>SBU:</strong> ${sbu}</p>
-            <p><strong>Date & Time:</strong> ${formattedDateTime} (Sri Lanka Time)</p>
-            <p><strong>Duration:</strong> ${duration_minutes} minutes</p>
-            ${special_notices ? `<p><strong>Special Notices:</strong> ${special_notices}</p>` : ''}
-            <p>Created by: ${created_by_name}</p>
-            <p>Please login to participate.</p>
-            <br>
-            <p>Best regards,<br>Anunine Holdings Pvt Ltd</p>
-          `;
-          
-          try {
-            await sendEmail(bidder.email, `Auction Invitation - ${title}`, emailHTML);
-          } catch (emailError) {
-            console.error(`Failed to send email to ${bidder.email}:`, emailError);
-          }
-        });
-
-        await Promise.all(emailPromises);
-      }
-    } catch (emailError) {
-      console.error('Error in email sending process:', emailError);
-      // Don't fail the entire operation for email errors
-    }
+    // NOTE: NO EMAIL SENDING HERE - Emails are only sent when auction is approved
     
     res.json({ 
       success: true, 
       auction: result.data.auction, 
       auction_id: result.data.auction_id,
-      message: 'Auction created successfully'
+      message: 'Auction created successfully and is pending approval. Bidders will be notified once approved.'
     });
 
   } catch (error) {
@@ -936,13 +886,13 @@ const getAllAuctionsAdmin = async (req, res) => {
 };
 
 
-// Approve auction function
+// Updated approveAuction function with proper foreign key handling and email notifications
+
 const approveAuction = async (req, res) => {
   try {
     const { auctionId } = req.params;
-    const approvedBy = req.user.name || req.user.user_id;
 
-    console.log('Approve auction request:', { auctionId, approvedBy });
+    console.log('Approve auction request:', { auctionId, user: req.user });
 
     // Check if user is system admin
     if (req.user.role !== 'system_admin') {
@@ -952,13 +902,34 @@ const approveAuction = async (req, res) => {
       });
     }
 
-    // Get auction
-    const { data: auction, error: fetchError } = await query(
-      'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
-      [auctionId, auctionId]
+    // Get the actual system admin user ID from database
+    const { data: sysAdminUser, error: userError } = await query(
+      'SELECT id, name, user_id FROM users WHERE user_id = ? AND role = ?',
+      ['SYSADMIN', 'system_admin']
     );
 
+    if (userError || !sysAdminUser || sysAdminUser.length === 0) {
+      console.error('System admin user not found:', userError);
+      return res.status(500).json({
+        success: false,
+        error: 'System administrator user not found in database'
+      });
+    }
+
+    const approvedByUserId = sysAdminUser[0].id; // This is the UUID from users table
+
+    // Get auction with invited bidders
+    const { data: auction, error: fetchError } = await query(`
+      SELECT a.*, 
+             GROUP_CONCAT(ab.bidder_id) as bidder_ids
+      FROM auctions a
+      LEFT JOIN auction_bidders ab ON a.id = ab.auction_id
+      WHERE (a.id = ? OR a.auction_id = ?)
+      GROUP BY a.id
+    `, [auctionId, auctionId]);
+
     if (fetchError || !auction || auction.length === 0) {
+      console.error('Auction not found:', fetchError);
       return res.status(404).json({
         success: false,
         error: 'Auction not found'
@@ -975,7 +946,7 @@ const approveAuction = async (req, res) => {
       });
     }
 
-    // Update auction status to approved
+    // Update auction status to approved with correct user ID
     const { error: updateError } = await query(
       `UPDATE auctions SET 
         status = 'approved', 
@@ -983,7 +954,7 @@ const approveAuction = async (req, res) => {
         approved_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP 
       WHERE id = ?`,
-      [approvedBy, auctionData.id]
+      [approvedByUserId, auctionData.id] // Use the UUID, not the name
     );
 
     if (updateError) {
@@ -993,9 +964,86 @@ const approveAuction = async (req, res) => {
 
     console.log('Auction approved successfully:', auctionData.auction_id);
 
+    // Send email notifications to invited bidders ONLY after approval
+    if (auctionData.bidder_ids) {
+      try {
+        const bidderIds = auctionData.bidder_ids.split(',');
+        
+        // Get bidder details for email
+        const { data: bidders, error: biddersError } = await query(
+          `SELECT email, name FROM users WHERE id IN (${bidderIds.map(() => '?').join(',')}) AND role = 'bidder' AND is_active = TRUE`,
+          bidderIds
+        );
+        
+        if (!biddersError && bidders && bidders.length > 0) {
+          // Format date/time for email in Sri Lanka timezone
+          const formattedDateTime = moment.tz(`${auctionData.auction_date} ${auctionData.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo')
+            .format('MMMM DD, YYYY at hh:mm A');
+          
+          const emailPromises = bidders.map(async (bidder) => {
+            const emailHTML = `
+              <h2>🎯 Auction Approved & Ready - Anunine Holdings Pvt Ltd</h2>
+              <p>Dear ${bidder.name},</p>
+              <p><strong>Great news!</strong> The auction you were invited to participate in has been <span style="color: #28a745; font-weight: bold;">APPROVED</span> and is now ready for bidding:</p>
+              
+              <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #007bff; margin: 20px 0;">
+                <p><strong>📋 Title:</strong> ${auctionData.title}</p>
+                <p><strong>🏷️ Category:</strong> ${auctionData.category}</p>
+                <p><strong>🏢 SBU:</strong> ${auctionData.sbu}</p>
+                <p><strong>📅 Date & Time:</strong> ${formattedDateTime} (Sri Lanka Time)</p>
+                <p><strong>⏱️ Duration:</strong> ${auctionData.duration_minutes} minutes</p>
+                ${auctionData.special_notices ? `<p><strong>📝 Special Notices:</strong> ${auctionData.special_notices}</p>` : ''}
+              </div>
+              
+              <p><strong>✅ Status:</strong> <span style="color: #28a745;">APPROVED - Ready for participation</span></p>
+              <p><strong>👤 Created by:</strong> ${auctionData.created_by}</p>
+              <p><strong>✅ Approved by:</strong> ${sysAdminUser[0].name}</p>
+              
+              <div style="background-color: #e8f5e8; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <p><strong>🚀 Next Steps:</strong></p>
+                <ul>
+                  <li>Please login to the auction system before the scheduled time</li>
+                  <li>Be ready to participate when the auction goes live</li>
+                  <li>Remember: This is a reverse auction - lowest bid wins!</li>
+                </ul>
+              </div>
+              
+              <p>Please ensure you're logged in and ready to participate at the scheduled time.</p>
+              <br>
+              <p>Best regards,<br>
+              <strong>Anunine Holdings Pvt Ltd</strong><br>
+              E-Auction System</p>
+              
+              <hr style="margin: 20px 0;">
+              <p style="font-size: 12px; color: #666;">
+                This is an automated notification. Please do not reply to this email.
+              </p>
+            `;
+            
+            try {
+              await sendEmail(
+                bidder.email, 
+                `🎯 Auction APPROVED & Ready: ${auctionData.title}`, 
+                emailHTML
+              );
+              console.log(`Approval email sent to ${bidder.email}`);
+            } catch (emailError) {
+              console.error(`Failed to send approval email to ${bidder.email}:`, emailError);
+            }
+          });
+
+          await Promise.all(emailPromises);
+          console.log(`Approval emails sent to ${bidders.length} bidders`);
+        }
+      } catch (emailError) {
+        console.error('Error in approval email sending process:', emailError);
+        // Don't fail the approval for email errors
+      }
+    }
+
     res.json({
       success: true,
-      message: 'Auction approved successfully',
+      message: 'Auction approved successfully and bidders notified',
       auction_id: auctionData.auction_id
     });
 
@@ -1008,6 +1056,7 @@ const approveAuction = async (req, res) => {
     });
   }
 };
+
 
 
 // Reject auction function

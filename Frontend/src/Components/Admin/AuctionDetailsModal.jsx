@@ -5,7 +5,6 @@ import {
   approveAuction,
   rejectAuction,
 } from "../../services/auctionService";
-import { isSystemAdmin } from "../../services/authService";
 import "../../styles/AuctionDetailsModal.css";
 
 const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
@@ -25,6 +24,24 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       fetchAuctionDetails();
     }
   }, [auction]);
+
+  /**
+   * Check if current user is system admin
+   */
+  const isSystemAdmin = () => {
+    console.log('Current User Role:', currentUser?.role);
+    return currentUser?.role === 'system_admin' || currentUser?.role === 'sys_admin';
+  };
+
+  /**
+   * Check if auction can be approved/rejected
+   */
+  const canTakeAction = (auction) => {
+    const status = auction?.calculated_status || auction?.status;
+    console.log('Auction Status:', status);
+    console.log('Is System Admin:', isSystemAdmin());
+    return status?.toLowerCase() === 'pending' && isSystemAdmin();
+  };
 
   /**
    * Fetch detailed auction information including invited bidders and bidding data
@@ -97,6 +114,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       setActionLoading(true);
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       
+      console.log('Approving auction with ID:', identifier);
       const response = await approveAuction(identifier);
       
       if (response.success) {
@@ -119,10 +137,16 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
    * Handle auction rejection
    */
   const handleRejectAuction = async () => {
+    if (!rejectionReason.trim()) {
+      alert("Please provide a reason for rejection.");
+      return;
+    }
+
     try {
       setActionLoading(true);
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       
+      console.log('Rejecting auction with ID:', identifier, 'Reason:', rejectionReason);
       const response = await rejectAuction(identifier, rejectionReason);
       
       if (response.success) {
@@ -209,19 +233,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
     }
   };
 
-  /**
-   * Check if current user can approve/reject auctions
-   */
-  const canApproveReject = isSystemAdmin();
-
-  /**
-   * Check if auction can be approved/rejected
-   */
-  const canTakeAction = (auction) => {
-    const status = auction?.calculated_status || auction?.status;
-    return status === 'pending';
-  };
-
   if (loading) {
     return (
       <div className="modal-backdrop" onClick={handleBackdropClick}>
@@ -256,7 +267,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
 
   // Use auction details if available, otherwise fall back to original auction data
   const displayAuction = auctionDetails || auction;
-  const currentStatus = displayAuction.calculated_status || displayAuction.status;
+  const currentStatus = (displayAuction.calculated_status || displayAuction.status)?.toLowerCase();
 
   return (
     <>
@@ -266,11 +277,42 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
           <div className="modal-header">
             <div className="header-content">
               <h2>Auction Details</h2>
+              {isSystemAdmin() && (
+                <span className="admin-badge">System Administrator</span>
+              )}
             </div>
             <button className="close-button" onClick={onClose}>
               ×
             </button>
           </div>
+
+          {/* System Admin Action Banner for Pending Auctions */}
+          {isSystemAdmin() && currentStatus === 'pending' && (
+            <div className="admin-action-banner">
+              <div className="banner-content">
+                <div className="banner-icon">⚠️</div>
+                <div className="banner-text">
+                  <strong>Action Required:</strong> This auction is pending your approval.
+                </div>
+              </div>
+              <div className="banner-actions">
+                <button
+                  className="btn btn-approve btn-small"
+                  onClick={handleApproveAuction}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Processing...' : '✅ Approve'}
+                </button>
+                <button
+                  className="btn btn-reject btn-small"
+                  onClick={() => setShowRejectModal(true)}
+                  disabled={actionLoading}
+                >
+                  ❌ Reject
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Approval Status Banner */}
           {(displayAuction.approved_by || displayAuction.rejected_by) && (
@@ -284,16 +326,21 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                     <small>on {formatDateTime(displayAuction.approved_at)}</small>
                   </div>
                 </div>
-              ) : (
+              ) : currentStatus === 'rejected' ? (
                 <div className="approval-info">
                   <span className="approval-icon">❌</span>
                   <div>
                     <strong>Rejected by:</strong> {displayAuction.rejected_by}
                     <br />
                     <small>on {formatDateTime(displayAuction.rejected_at)}</small>
+                    {displayAuction.rejection_reason && (
+                      <div className="rejection-reason">
+                        <strong>Reason:</strong> {displayAuction.rejection_reason}
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           )}
 
@@ -328,23 +375,23 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                   <div className="detail-item">
                     <label>Auction ID:</label>
                     <span className="auction-id-display">
-                      {displayAuction.auction_id}
+                      {displayAuction.auction_id || displayAuction.AuctionID}
                     </span>
                   </div>
 
                   <div className="detail-item">
                     <label>Title:</label>
-                    <span>{displayAuction.title}</span>
+                    <span>{displayAuction.title || displayAuction.Title}</span>
                   </div>
 
                   <div className="detail-item">
                     <label>Category:</label>
-                    <span>{displayAuction.category}</span>
+                    <span>{displayAuction.category || displayAuction.Category}</span>
                   </div>
 
                   <div className="detail-item">
                     <label>SBU:</label>
-                    <span className="sbu-badge">{displayAuction.sbu}</span>
+                    <span className="sbu-badge">{displayAuction.sbu || displayAuction.SBU}</span>
                   </div>
 
                   <div className="detail-item">
@@ -356,7 +403,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
 
                   <div className="detail-item">
                     <label>Date & Time:</label>
-                    <span>{formatDateTime(displayAuction.date_time)}</span>
+                    <span>{formatDateTime(displayAuction.date_time || displayAuction.DateTime)}</span>
                   </div>
 
                   <div className="detail-item">
@@ -364,6 +411,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                     <span>
                       {displayAuction.duration ||
                         displayAuction.duration_minutes ||
+                        displayAuction.Duration ||
                         0}{" "}
                       minutes
                     </span>
@@ -643,26 +691,23 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
               <small>Last updated: {new Date().toLocaleString("en-GB")}</small>
             </div>
             <div className="footer-actions">
-              {canApproveReject && canTakeAction(displayAuction) && (
+              {/* Show approval/rejection buttons only for system admins and pending auctions */}
+              {canTakeAction(displayAuction) && (
                 <>
-                  {currentStatus === 'pending' && (
-                    <>
-                      <button
-                        className="btn btn-approve"
-                        onClick={handleApproveAuction}
-                        disabled={actionLoading}
-                      >
-                        {actionLoading ? 'Processing...' : 'Approve'}
-                      </button>
-                      <button
-                        className="btn btn-reject"
-                        onClick={() => setShowRejectModal(true)}
-                        disabled={actionLoading}
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
+                  <button
+                    className="btn btn-approve"
+                    onClick={handleApproveAuction}
+                    disabled={actionLoading}
+                  >
+                    {actionLoading ? 'Processing...' : '✅ Approve Auction'}
+                  </button>
+                  <button
+                    className="btn btn-reject"
+                    onClick={() => setShowRejectModal(true)}
+                    disabled={actionLoading}
+                  >
+                    ❌ Reject Auction
+                  </button>
                 </>
               )}
               <button className="btn btn-secondary" onClick={onClose}>
@@ -675,31 +720,50 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
 
       {/* Rejection Modal */}
       {showRejectModal && (
-        <div className="modal-backdrop">
+        <div className="modal-backdrop" style={{ zIndex: 1001 }}>
           <div className="modal-content reject-modal">
             <div className="modal-header">
               <h3>Reject Auction</h3>
               <button 
                 className="close-button" 
-                onClick={() => setShowRejectModal(false)}
+                onClick={() => {
+                  setShowRejectModal(false);
+                  setRejectionReason("");
+                }}
               >
                 ×
               </button>
             </div>
             <div className="modal-body">
-              <p>Please provide a reason for rejecting this auction:</p>
-              <textarea
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="Enter rejection reason..."
-                rows="4"
-                className="rejection-textarea"
-              />
+              <div className="rejection-form">
+                <p><strong>Auction ID:</strong> {displayAuction.auction_id || displayAuction.AuctionID}</p>
+                <p><strong>Title:</strong> {displayAuction.title || displayAuction.Title}</p>
+                <hr />
+                <label htmlFor="rejectionReason">
+                  <strong>Reason for Rejection:</strong> <span className="required">*</span>
+                </label>
+                <textarea
+                  id="rejectionReason"
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Please provide a detailed reason for rejecting this auction..."
+                  rows="4"
+                  className="rejection-textarea"
+                  required
+                />
+                <small className="help-text">
+                  This reason will be visible to the auction creator and other administrators.
+                </small>
+              </div>
             </div>
             <div className="modal-footer">
               <button 
                 className="btn btn-secondary" 
-                onClick={() => setShowRejectModal(false)}
+                onClick={() => {
+                  setShowRejectModal(false);
+                  setRejectionReason("");
+                }}
+                disabled={actionLoading}
               >
                 Cancel
               </button>
@@ -708,7 +772,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                 onClick={handleRejectAuction}
                 disabled={actionLoading || !rejectionReason.trim()}
               >
-                {actionLoading ? 'Rejecting...' : 'Reject Auction'}
+                {actionLoading ? 'Rejecting...' : '❌ Reject Auction'}
               </button>
             </div>
           </div>

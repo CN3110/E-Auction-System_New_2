@@ -25,17 +25,24 @@ const authenticate = async (req, res, next) => {
       return next();
     }
 
-    // Handle system admin authentication (hardcoded system admin)
+    // Handle system admin authentication - GET THE REAL DATABASE ID
     if (decoded.user_id === 'SYSADMIN') {
-      req.user = {
-        id: 'sysadmin-hardcoded-id',
-        user_id: 'SYSADMIN',
-        name: 'System Administrator',
-        email: 'sysadmin@eauction.com',
-        role: 'system_admin',
-        company: 'Anunine Holdings Pvt Ltd',
-        is_active: true
-      };
+      // Get the actual system admin user from database to get the real UUID
+      const { data: sysAdmin, error: sysAdminError } = await query(
+        'SELECT * FROM users WHERE user_id = ? AND role = ? AND is_active = TRUE',
+        ['SYSADMIN', 'system_admin']
+      );
+
+      if (sysAdminError || !sysAdmin || sysAdmin.length === 0) {
+        console.error('System admin not found in database:', sysAdminError);
+        return res.status(401).json({ 
+          success: false, 
+          error: 'System administrator not found' 
+        });
+      }
+
+      // Use the real database record, not hardcoded values
+      req.user = sysAdmin[0];
       return next();
     }
 
