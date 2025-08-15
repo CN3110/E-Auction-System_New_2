@@ -1649,4 +1649,5 @@ rejectAuction,
 updateAuction,
 deleteAuction,
 getAuctionStatistics,
+getCurrentSLTime,  // Add this line - it was missing
 };

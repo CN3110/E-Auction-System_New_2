@@ -27,18 +27,11 @@ const io = socketIo(server, {
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// Routes (FIXED - removed duplicate admin route registration)
 app.use('/api/auth', require('./Routes/auth'));
 app.use('/api/admin', require('./Routes/admin'));
 app.use('/api/auction', require('./Routes/auctionRoutes'));
 app.use('/api/bid', require('./Routes/bidRoutes'));
-
-console.log("Admin routes path:", require.resolve('./Routes/admin'));
-
-// Modify your route registration
-const adminRouter = require('./Routes/admin');
-app.use('/api/admin', adminRouter);
-console.log("Registered admin routes:");
 
 // Real-time handling
 io.on('connection', (socket) => {
@@ -70,14 +63,18 @@ server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Import required modules for auction management
+// Import required modules for real-time auction management
 const { query } = require('./Config/database');
 const moment = require('moment-timezone');
 const { 
   updateAuctionStatuses, 
-  getCurrentSLTime, 
   isAuctionLive 
 } = require('./Controllers/auctionController');
+
+// Define getCurrentSLTime locally to avoid circular dependencies
+const getCurrentSLTime = () => {
+  return moment().tz('Asia/Colombo');
+};
 
 // Function to update rankings for all live auctions with Sri Lanka timezone
 const updateLiveAuctionRankings = async () => {
@@ -99,8 +96,6 @@ const updateLiveAuctionRankings = async () => {
       return isAuctionLive(auction);
     });
     
-    //console.log(`🔄 Found ${liveAuctions.length} live auctions at ${nowSL.format('YYYY-MM-DD HH:mm:ss')} SL time`);
-    
     // Update rankings for each live auction
     for (const auction of liveAuctions) {
       await updateAuctionRankings(auction.id);
@@ -114,7 +109,7 @@ const updateLiveAuctionRankings = async () => {
   }
 };
 
-// Function to update rankings for a specific auction
+// Function to update rankings for a specific auction (REAL-TIME SOCKET UPDATES)
 const updateAuctionRankings = async (auctionId) => {
   try {
     // Get all bids for this auction with bidder information
@@ -213,7 +208,7 @@ const updateAuctionRankings = async (auctionId) => {
   }
 };
 
-// Function to check and update auction statuses
+// Function to check and update auction statuses (FIXED - removed 'scheduled' status)
 const checkAndUpdateAuctionStatuses = async () => {
   try {
     const { data: auctions, error } = await query(
@@ -234,28 +229,42 @@ const checkAndUpdateAuctionStatuses = async () => {
       
       let newStatus = auction.status;
       
-      if (nowSL.isBefore(startDateTime) && auction.status !== 'scheduled') {
-        newStatus = 'scheduled';
-      } else if (nowSL.isBetween(startDateTime, endDateTime, null, '[]') && auction.status !== 'live') {
-        newStatus = 'live';
-        // Emit auction started event
-        io.emit('auction-status-change', {
-          auctionId: auction.id,
-          auction_id: auction.auction_id,
-          status: 'live',
-          message: 'Auction is now live!',
-          timestamp: nowSL.format('YYYY-MM-DD HH:mm:ss')
-        });
-      } else if (nowSL.isAfter(endDateTime) && auction.status !== 'ended') {
-        newStatus = 'ended';
-        // Emit auction ended event
-        io.emit('auction-status-change', {
-          auctionId: auction.id,
-          auction_id: auction.auction_id,
-          status: 'ended',
-          message: 'Auction has ended!',
-          timestamp: nowSL.format('YYYY-MM-DD HH:mm:ss')
-        });
+      // Only change status for approved auctions based on time
+      if (auction.status === 'approved') {
+        if (nowSL.isBetween(startDateTime, endDateTime, null, '[]')) {
+          newStatus = 'live';
+          // Emit auction started event
+          io.emit('auction-status-change', {
+            auctionId: auction.id,
+            auction_id: auction.auction_id,
+            status: 'live',
+            message: 'Auction is now live!',
+            timestamp: nowSL.format('YYYY-MM-DD HH:mm:ss')
+          });
+        } else if (nowSL.isAfter(endDateTime)) {
+          newStatus = 'ended';
+          // Emit auction ended event
+          io.emit('auction-status-change', {
+            auctionId: auction.id,
+            auction_id: auction.auction_id,
+            status: 'ended',
+            message: 'Auction has ended!',
+            timestamp: nowSL.format('YYYY-MM-DD HH:mm:ss')
+          });
+        }
+      } else if (auction.status === 'live') {
+        // Change live auctions to ended when time is up
+        if (nowSL.isAfter(endDateTime)) {
+          newStatus = 'ended';
+          // Emit auction ended event
+          io.emit('auction-status-change', {
+            auctionId: auction.id,
+            auction_id: auction.auction_id,
+            status: 'ended',
+            message: 'Auction has ended!',
+            timestamp: nowSL.format('YYYY-MM-DD HH:mm:ss')
+          });
+        }
       }
       
       // Update database if status changed
