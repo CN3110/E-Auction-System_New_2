@@ -125,16 +125,22 @@ const getLiveAuctionsForBidder = async (req, res) => {
     const pastAuctions = [];
     
     for (const auction of invitedAuctions) {
-      console.log(`\n--- Checking auction ${auction.auction_id} for live status ---`);
+      //console.log(`\n--- Checking auction ${auction.auction_id} for live status ---`);
       
-      const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-      const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+      // Make sure the date and time values are properly formatted strings
+const startDateTime = moment.tz(
+  `${auction.auction_date} ${auction.start_time}`, 
+  'YYYY-MM-DD HH:mm:ss', 
+  'Asia/Colombo'
+);
+
+const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
       
-      console.log(`Auction: ${auction.title}`);
-      console.log(`Status: ${auction.status}`);
-      console.log(`Start: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
-      console.log(`End: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
-      console.log(`Current: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
+      //console.log(`Auction: ${auction.title}`);
+      //console.log(`Status: ${auction.status}`);
+      //console.log(`Start: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+      //console.log(`End: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+      //console.log(`Current: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
       
       const isLive = isAuctionLive(auction);
       
@@ -153,7 +159,7 @@ const getLiveAuctionsForBidder = async (req, res) => {
           time_until_end: moment.duration(timeRemaining).humanize()
         });
       } else {
-        console.log(`❌ Auction ${auction.auction_id} is NOT live`);
+        //console.log(`❌ Auction ${auction.auction_id} is NOT live`);
         
         // Categorize non-live auctions
         if (nowSL.isBefore(startDateTime)) {
@@ -178,9 +184,9 @@ const getLiveAuctionsForBidder = async (req, res) => {
       }
     }
 
-    console.log(`\nFinal result: ${liveAuctions.length} live auctions found`);
-    console.log(`Future auctions: ${futureAuctions.length}`);
-    console.log(`Past auctions: ${pastAuctions.length}`);
+    //console.log(`\nFinal result: ${liveAuctions.length} live auctions found`);
+    //console.log(`Future auctions: ${futureAuctions.length}`);
+    //console.log(`Past auctions: ${pastAuctions.length}`);
 
     // Prepare response message
     let message = '';
