@@ -15,6 +15,7 @@ const LiveAuction = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [currentTimeSL, setCurrentTimeSL] = useState('');
 
   // Helper functions
   const showAlert = useCallback((message, type) => {
@@ -30,18 +31,24 @@ const LiveAuction = () => {
     }).format(amount);
   };
 
-  const formatDateTime = (date, time) => {
+  // IMPROVED: Format date/time to Sri Lanka time (Asia/Colombo)
+  const formatToSLTime = (utcDateString) => {
     try {
-      // FIXED: Proper timezone handling for Sri Lanka
-      const dateTime = new Date(`${date}T${time}+05:30`);
-      return dateTime.toLocaleString('en-US', {
+      const date = new Date(utcDateString);
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date string:', utcDateString);
+        return 'Invalid date';
+      }
+      
+      return date.toLocaleString('en-US', {
+        timeZone: 'Asia/Colombo',
         year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        hour12: true,
-        timeZone: 'Asia/Colombo'
+        second: '2-digit',
+        hour12: true
       });
     } catch (error) {
       console.error('Error formatting date:', error);
@@ -49,7 +56,70 @@ const LiveAuction = () => {
     }
   };
 
-  // FIXED: Updated auction status check with proper Sri Lanka timezone
+  // IMPROVED: Format just the time portion in SL time
+  const formatToSLTimeOnly = (utcDateString) => {
+    try {
+      const date = new Date(utcDateString);
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date string:', utcDateString);
+        return 'Invalid time';
+      }
+      
+      return date.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Colombo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return 'Invalid time';
+    }
+  };
+
+  // NEW: Get current Sri Lanka time
+  const getCurrentSLTime = () => {
+    try {
+      const now = new Date();
+      return now.toLocaleString('en-US', {
+        timeZone: 'Asia/Colombo',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+    } catch (error) {
+      console.error('Error getting current SL time:', error);
+      return 'Invalid time';
+    }
+  };
+
+  // IMPROVED: Calculate auction end time with proper date handling
+  const calculateAuctionEnd = (auctionItem) => {
+    try {
+      if (auctionItem.auction_end) {
+        return new Date(auctionItem.auction_end);
+      }
+      
+      // Handle the auction_date properly
+      const startDate = new Date(auctionItem.auction_date);
+      if (isNaN(startDate.getTime())) {
+        console.error('Invalid auction start date:', auctionItem.auction_date);
+        return new Date(); // Return current time as fallback
+      }
+      
+      const endTime = new Date(startDate.getTime() + auctionItem.duration_minutes * 60000);
+      return endTime;
+    } catch (error) {
+      console.error('Error calculating auction end time:', error);
+      return new Date();
+    }
+  };
+
+  // IMPROVED: Auction status check with better error handling
   const isAuctionLive = useCallback((auctionItem) => {
     if (!auctionItem) {
       console.log('No auction item provided');
@@ -57,52 +127,59 @@ const LiveAuction = () => {
     }
     
     try {
-      // FIXED: Create date objects with proper Sri Lanka timezone offset
+      // Get current time
       const now = new Date();
-      const auctionStart = new Date(`${auctionItem.auction_date}T${auctionItem.start_time}+05:30`);
-      const auctionEnd = new Date(auctionStart.getTime() + auctionItem.duration_minutes * 60000);
       
-      // Convert to Sri Lanka time for comparison
-      const nowSL = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + (5.5 * 3600000));
-      const startSL = new Date(auctionStart.getTime());
-      const endSL = new Date(auctionEnd.getTime());
+      // Calculate end time
+      const auctionEnd = calculateAuctionEnd(auctionItem);
+      const auctionStart = new Date(auctionItem.auction_date);
       
       console.log('Frontend auction live check:', {
         auction_id: auctionItem.auction_id,
-        now_utc: now.toISOString(),
-        now_sl: nowSL.toISOString(),
-        start_sl: startSL.toISOString(),
-        end_sl: endSL.toISOString(),
-        is_live: nowSL >= startSL && nowSL <= endSL,
-        status: auctionItem.status
+        now: now.toISOString(),
+        now_sl: getCurrentSLTime(),
+        auctionStart: auctionStart.toISOString(),
+        auctionEnd: auctionEnd.toISOString(),
+        is_within_time: now >= auctionStart && now <= auctionEnd,
+        status: auctionItem.status,
+        calculated_status: auctionItem.calculated_status,
+        is_live_flag: auctionItem.is_live
       });
       
-      // Check if auction is approved/live status and within time range
-      const isApprovedOrLive = auctionItem.status === 'approved' || auctionItem.status === 'live';
-      const isWithinTime = nowSL >= startSL && nowSL <= endSL;
+      // Check if auction is live based on backend's calculated_status and time range
+      const isLiveByStatus = auctionItem.calculated_status === 'live' || auctionItem.is_live;
+      const isWithinTime = now >= auctionStart && now <= auctionEnd;
       
-      return isApprovedOrLive && isWithinTime;
+      return isLiveByStatus && isWithinTime;
     } catch (error) {
       console.error('Error checking auction status:', error);
       return false;
     }
   }, []);
 
-  // FIXED: Updated API function with better error handling and debugging
   const fetchLiveAuction = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       console.log('Fetching live auction with token:', token ? 'Token exists' : 'No token');
       
-      const response = await fetch('http://localhost:5000/api/auction/bidder/live', {
+      if (!token) {
+        throw new Error('Please login to access auctions');
+      }
+
+      const response = await fetch('http://localhost:5000/api/auction/live/bidder', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
-      
+
       console.log('Response status:', response.status);
       
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        throw new Error('Session expired. Please login again.');
+      }
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Response error:', errorText);
@@ -112,15 +189,71 @@ const LiveAuction = () => {
       const data = await response.json();
       console.log('API Response data:', data);
       
-      const auctions = Array.isArray(data.auctions) ? data.auctions : [];
-      console.log('Processed auctions:', auctions);
-      
-      return auctions;
+      return Array.isArray(data.auctions) ? data.auctions : [];
     } catch (error) {
       console.error('Error fetching live auction:', error);
       throw error;
     }
   }, []);
+
+  const fetchAuctionData = useCallback(async () => {
+    try {
+      console.log('Fetching auction data...');
+      setHasError(false);
+      
+      const auctions = await fetchLiveAuction();
+      console.log('Received auctions:', auctions);
+      
+      if (!auctions || auctions.length === 0) {
+        console.log('No auctions received from API');
+        setAuction(null);
+        setBidderInfo({ rank: null, latestBid: null });
+        return;
+      }
+      
+      let liveAuction = null;
+      for (const auc of auctions) {
+        if (auc.calculated_status === 'live' || auc.is_live) {
+          liveAuction = auc;
+          break;
+        }
+      }
+      
+      if (!liveAuction) {
+        console.log('No live auctions found');
+        setAuction(null);
+        setBidderInfo({ rank: null, latestBid: null });
+        return;
+      }
+
+      setAuction(liveAuction);
+      
+      const [rankData, latestBid] = await Promise.all([
+        fetchBidderRank(liveAuction.id),
+        fetchLatestBid(liveAuction.id)
+      ]);
+      
+      setBidderInfo({
+        rank: rankData?.rank || null,
+        latestBid: latestBid?.amount || null,
+        totalBidders: rankData?.totalBidders || 0
+      });
+      
+    } catch (error) {
+      console.error('Error fetching auction data:', error);
+      setHasError(true);
+      
+      if (error.message.includes('Session expired') || 
+          error.message.includes('Please login')) {
+        showAlert(error.message, 'danger');
+        // Consider redirecting to login here
+      } else {
+        showAlert(`Error fetching auction data: ${error.message}`, 'danger');
+      }
+    } finally {
+      setInitialLoading(false);
+    }
+  }, [showAlert]);
 
   const placeBid = useCallback(async (auctionId, amount) => {
     try {
@@ -192,99 +325,46 @@ const LiveAuction = () => {
     }
   }, []);
 
-  // FIXED: Updated fetchAuctionData with better debugging and logic
-  const fetchAuctionData = useCallback(async () => {
-    try {
-      console.log('Fetching auction data...');
-      setHasError(false);
-      
-      const auctions = await fetchLiveAuction();
-      console.log('Received auctions:', auctions);
-      
-      if (!auctions || auctions.length === 0) {
-        console.log('No auctions received from API');
-        setAuction(null);
-        setBidderInfo({ rank: null, latestBid: null });
-        return;
-      }
-      
-      // FIXED: The backend should already filter for live auctions, so take the first one
-      // But double-check to be safe
-      let liveAuction = null;
-      for (const auc of auctions) {
-        console.log(`Checking auction ${auc.auction_id} for live status`);
-        console.log('Auction data:', {
-          id: auc.auction_id,
-          status: auc.status,
-          calculated_status: auc.calculated_status,
-          is_live: auc.is_live,
-          start_time: auc.auction_date + ' ' + auc.start_time,
-          duration: auc.duration_minutes
-        });
-        
-        // If backend says it's live, trust it, but also do our own check
-        if ((auc.is_live || auc.calculated_status === 'live') && isAuctionLive(auc)) {
-          liveAuction = auc;
-          console.log(`Confirmed live auction: ${auc.auction_id}`);
-          break;
-        }
-      }
-      
-      if (!liveAuction) {
-        console.log('No live auctions found from the available auctions');
-        setAuction(null);
-        setBidderInfo({ rank: null, latestBid: null });
-        return;
-      }
-
-      console.log('Setting live auction:', liveAuction);
-      setAuction(liveAuction);
-      
-      // Fetch both rank and latest bid
-      const [rankData, latestBid] = await Promise.all([
-        fetchBidderRank(liveAuction.id),
-        fetchLatestBid(liveAuction.id)
-      ]);
-      
-      setBidderInfo({
-        rank: rankData?.rank || null,
-        latestBid: latestBid?.amount || null,
-        totalBidders: rankData?.totalBidders || 0
-      });
-      
-    } catch (error) {
-      console.error('Error fetching auction data:', error);
-      setHasError(true);
-      showAlert(`Error fetching auction data: ${error.message}`, 'danger');
-    } finally {
-      setInitialLoading(false);
-    }
-  }, [fetchLiveAuction, fetchBidderRank, fetchLatestBid, isAuctionLive, showAlert]);
-
-  // FIXED: Updated timer with proper timezone handling
+  // IMPROVED: Updated timer function with proper SL time handling
   const updateTimer = useCallback(() => {
     if (!auction) return;
 
     try {
       const now = new Date();
-      const auctionStart = new Date(`${auction.auction_date}T${auction.start_time}+05:30`);
-      const auctionEnd = new Date(auctionStart.getTime() + auction.duration_minutes * 60000);
+      const auctionEnd = calculateAuctionEnd(auction);
+      const timeRemaining = auctionEnd.getTime() - now.getTime();
       
-      // Convert current time to Sri Lanka time for comparison
-      const nowSL = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + (5.5 * 3600000));
-      const timeRemaining = auctionEnd.getTime() - nowSL.getTime();
+      // Update current SL time
+      setCurrentTimeSL(getCurrentSLTime());
+      
+      console.log('Timer calculation:', {
+        now: now.toISOString(),
+        now_sl: getCurrentSLTime(),
+        auctionStart: auction.auction_date,
+        auctionEnd: auctionEnd.toISOString(),
+        auctionEnd_sl: formatToSLTime(auctionEnd.toISOString()),
+        timeRemaining: timeRemaining,
+        timeRemainingMinutes: Math.floor(timeRemaining / 60000)
+      });
       
       if (timeRemaining <= 0) {
-        setTimeLeft('00:00');
+        setTimeLeft('Auction Ended');
         console.log('Auction ended, refreshing data...');
         fetchAuctionData(); // Refresh data when auction ends
       } else {
-        const minutes = Math.floor(timeRemaining / 60000);
+        const hours = Math.floor(timeRemaining / 3600000);
+        const minutes = Math.floor((timeRemaining % 3600000) / 60000);
         const seconds = Math.floor((timeRemaining % 60000) / 1000);
-        setTimeLeft(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+        
+        if (hours > 0) {
+          setTimeLeft(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+        } else {
+          setTimeLeft(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+        }
       }
     } catch (error) {
       console.error('Error updating timer:', error);
+      setTimeLeft('Error');
     }
   }, [auction, fetchAuctionData]);
 
@@ -292,10 +372,15 @@ const LiveAuction = () => {
   useEffect(() => {
     console.log('Initial data fetch on component mount');
     fetchAuctionData();
+    
+    // Update current time immediately
+    setCurrentTimeSL(getCurrentSLTime());
+    
     const interval = setInterval(() => {
       console.log('Periodic data refresh...');
       fetchAuctionData();
     }, 30000); // Refresh every 30 seconds
+    
     return () => clearInterval(interval);
   }, [fetchAuctionData]);
 
@@ -306,6 +391,15 @@ const LiveAuction = () => {
       return () => clearInterval(timer);
     }
   }, [auction, updateTimer]);
+
+  // Update current time every second
+  useEffect(() => {
+    const timeTimer = setInterval(() => {
+      setCurrentTimeSL(getCurrentSLTime());
+    }, 1000);
+    
+    return () => clearInterval(timeTimer);
+  }, []);
 
   // Event handlers
   const handlePlaceBid = async () => {
@@ -383,6 +477,10 @@ const LiveAuction = () => {
     return (
       <div className="live-auction">
         <h2>Live Auction</h2>
+        <div className="current-time-display text-center mb-3">
+          <small className="text-muted">Current Time (Sri Lanka): </small>
+          <strong>{currentTimeSL}</strong>
+        </div>
         <Alert 
           message="Currently there are no live auctions available to you. Please check back later or contact the administrator if you believe you should have access to a live auction."
           type="info"
@@ -398,13 +496,30 @@ const LiveAuction = () => {
     );
   }
 
+  // IMPROVED: Calculate auction end time for display with proper error handling
+  const auctionEndTime = calculateAuctionEnd(auction);
+  const auctionStatus = auction.calculated_status || 
+                       (isAuctionLive(auction) ? 'live' : 'ended');
+
   return (
     <div className="live-auction">
       <h2>Live Auction</h2>
       
+      {/* NEW: Current Sri Lanka Time Display */}
+      <div className="current-time-display text-center mb-3">
+        <small className="text-muted">Current Time (Sri Lanka): </small>
+        <strong className="text-primary">{currentTimeSL}</strong>
+      </div>
+      
       <div className="timer-container text-center mb-4">
-        <div className="timer display-4 text-primary fw-bold">{timeLeft}</div>
-        <small className="text-muted">Time Remaining</small>
+        <div className={`timer display-4 fw-bold ${
+          auctionStatus === 'live' ? 'text-danger' : 'text-secondary'
+        }`}>
+          {timeLeft}
+        </div>
+        <small className="text-muted">
+          {auctionStatus === 'live' ? 'Time Remaining' : 'Auction Status'}
+        </small>
       </div>
       
       <div className="row">
@@ -416,6 +531,9 @@ const LiveAuction = () => {
                 <span className={`badge ms-2 ${bidderInfo.rank === 1 ? 'bg-success' : bidderInfo.rank <= 3 ? 'bg-warning' : 'bg-secondary'}`}>
                   {bidderInfo.rank ? `#${bidderInfo.rank}` : 'No rank yet'}
                 </span>
+                {bidderInfo.totalBidders > 0 && (
+                  <span className="text-muted ms-2">(of {bidderInfo.totalBidders})</span>
+                )}
               </p>
               <p className="mb-2">
                 <strong>Your Latest Bid:</strong> 
@@ -436,13 +554,13 @@ const LiveAuction = () => {
                   placeholder="Enter bid amount" 
                   min="0"
                   step="0.01"
-                  disabled={loading || !isAuctionLive(auction)}
+                  disabled={loading || auctionStatus !== 'live'}
                 />
               </div>
               <button 
                 className="btn btn-primary w-100" 
                 onClick={handlePlaceBid}
-                disabled={loading || !bidAmount || !isAuctionLive(auction)}
+                disabled={loading || !bidAmount || auctionStatus !== 'live'}
               >
                 {loading ? (
                   <>
@@ -471,14 +589,34 @@ const LiveAuction = () => {
             <p><strong>Auction ID:</strong> {auction.auction_id}</p>
             <p><strong>Category:</strong> {auction.category}</p>
             <p><strong>SBU:</strong> {auction.sbu}</p>
-            <p><strong>Start Time:</strong> {formatDateTime(auction.auction_date, auction.start_time)}</p>
-            <p><strong>Duration:</strong> {auction.duration_minutes} minutes</p>
-            <p>
-              <strong>Status:</strong> 
-              <span className={`badge ms-2 ${isAuctionLive(auction) ? 'bg-success' : 'bg-secondary'}`}>
-                {isAuctionLive(auction) ? 'LIVE' : 'ENDED'}
-              </span>
-            </p>
+            
+            {/* IMPROVED: Updated date/time display with better formatting */}
+            <div className="time-details border-top pt-3 mt-3">
+              <h6 className="text-muted">Time Details (Sri Lanka Time)</h6>
+              <p className="mb-2">
+                <strong>Start Date/Time:</strong> 
+                <br />
+                <span className="text-success">{formatToSLTime(auction.auction_date)}</span>
+              </p>
+              
+              <p className="mb-2">
+                <strong>Duration:</strong> {auction.duration_minutes} minutes
+              </p>
+            </div>
+            
+            <div className="status-info border-top pt-3 mt-3">
+              <p className="mb-2">
+                <strong>Status:</strong> 
+                <span className={`badge ms-2 ${
+                  auctionStatus === 'live' ? 'bg-success' : 
+                  auctionStatus === 'upcoming' ? 'bg-info' : 'bg-secondary'
+                }`}>
+                  {auctionStatus.toUpperCase()}
+                </span>
+              </p>
+              
+              
+            </div>
             
             {auction.special_notices && (
               <div className="mt-3">
@@ -491,6 +629,11 @@ const LiveAuction = () => {
           </Card>
         </div>
       </div>
+      
+      
+         
+      
+
     </div>
   );
 };

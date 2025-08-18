@@ -256,19 +256,7 @@ const ViewAuctions = () => {
     }
   };
 
-  /**
-   * Format date and time for display
-   */
-  const formatDateTime = (dateTimeString) => {
-    const date = new Date(dateTimeString);
-    return {
-      date: date.toLocaleDateString('en-GB'),
-      time: date.toLocaleTimeString('en-GB', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      })
-    };
-  };
+ 
 
   // Pagination logic
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -462,16 +450,34 @@ const ViewAuctions = () => {
                 </tr>
               ) : (
                 currentItems.map((auction) => {
-                  const dateTime = formatDateTime(auction.DateTime || `${auction.auction_date} ${auction.start_time}`);
+                  //const dateTime = formatDateTime(auction.DateTime || `${auction.auction_date} ${auction.start_time}`);
                   
                   return (
                     <tr key={auction.AuctionID || auction.id}>
-                      <td className="auction-id">{auction.AuctionID}</td>
-                      <td className="auction-title">{auction.Title}</td>
-                      <td>{auction.Category}</td>
-                      <td>{auction.SBU}</td>
-                      <td>{dateTime.date}</td>
-                      <td>{dateTime.time}</td>
+                      <td className="auction-id">{auction.auction_id}</td>
+                      <td className="auction-title">{auction.title}</td>
+                      <td>{auction.category}</td>
+                      <td>{auction.sbu}</td>
+                      {/* Format Auction Date */}
+    <td>
+      {auction.auction_date
+        ? new Date(auction.auction_date).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short", // e.g. Aug
+            day: "numeric",
+          })
+        : ""}
+    </td>
+
+                      {/* Format Start Time */}
+    <td>
+      {auction.start_time
+        ? new Date(`1970-01-01T${auction.start_time}`).toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : ""}
+    </td>
                       <td>{auction.Duration || `${auction.duration_minutes} min`}</td>
                       <td>
                         <span className={getStatusBadgeClass(auction.calculated_status || auction.status)}>

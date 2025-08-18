@@ -8,15 +8,124 @@ const getCurrentSLTime = () => {
   return moment().tz('Asia/Colombo');
 };
 
+// Helper function to check if auction should be live
+const isAuctionLive = (auction) => {
+  try {
+    if (!auction || !auction.auction_date || !auction.start_time) {
+      return false;
+    }
 
-// FIXED: Updated createAuction function - REMOVED email sending (emails only sent on approval)
+    const nowSL = getCurrentSLTime();
+    
+    // Handle different date formats
+    let auctionDate = auction.auction_date;
+    let auctionTime = auction.start_time;
+    
+    if (auctionDate instanceof Date) {
+      auctionDate = moment(auctionDate).format('YYYY-MM-DD');
+    }
+    
+    // Convert to string and clean time format
+    auctionDate = String(auctionDate);
+    auctionTime = String(auctionTime);
+    
+    if (auctionTime.includes('.')) {
+      auctionTime = auctionTime.split('.')[0];
+    }
+    
+    // Create start and end datetime
+    const startDateTime = moment.tz(`${auctionDate} ${auctionTime}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    const endDateTime = startDateTime.clone().add(auction.duration_minutes || 0, 'minutes');
+    
+    if (!startDateTime.isValid()) {
+      console.error(`Invalid datetime for auction ${auction.auction_id}: ${auctionDate} ${auctionTime}`);
+      return false;
+    }
+    
+    // Check if auction is approved and within time bounds
+    const isApproved = auction.status === 'approved' || auction.status === 'live';
+    const isWithinTimeRange = nowSL.isBetween(startDateTime, endDateTime, null, '[]');
+    
+    return isApproved && isWithinTimeRange;
+  } catch (error) {
+    console.error('Error checking if auction is live:', error);
+    return false;
+  }
+};
+
+// Helper function to get auction calculated status
+const getAuctionStatus = (auction) => {
+  try {
+    if (!auction || !auction.auction_date || !auction.start_time) {
+      return 'error';
+    }
+
+    const nowSL = getCurrentSLTime();
+    
+    // Handle date/time parsing
+    let auctionDate = auction.auction_date;
+    let auctionTime = auction.start_time;
+    
+    if (auctionDate instanceof Date) {
+      auctionDate = moment(auctionDate).format('YYYY-MM-DD');
+    }
+    
+    auctionDate = String(auctionDate);
+    auctionTime = String(auctionTime);
+    
+    if (auctionTime.includes('.')) {
+      auctionTime = auctionTime.split('.')[0];
+    }
+    
+    const startDateTime = moment.tz(`${auctionDate} ${auctionTime}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    const endDateTime = startDateTime.clone().add(auction.duration_minutes || 0, 'minutes');
+    
+    if (!startDateTime.isValid()) {
+      console.error(`Cannot parse auction datetime: ${auctionDate} ${auctionTime}`);
+      return 'error';
+    }
+    
+    // If auction is rejected or pending
+    if (auction.status === 'rejected' || auction.status === 'pending') {
+      return auction.status;
+    }
+    
+    // Time-based status for approved auctions
+    if (auction.status === 'approved') {
+      if (nowSL.isBefore(startDateTime)) {
+        return 'approved'; // Approved but not started
+      } else if (nowSL.isBetween(startDateTime, endDateTime, null, '[]')) {
+        return 'live'; // Should be live now
+      } else {
+        return 'ended'; // Time has passed
+      }
+    }
+    
+    // For live auctions, check if they should end
+    if (auction.status === 'live') {
+      if (nowSL.isSameOrAfter(endDateTime)) {
+        return 'ended';
+      } else {
+        return 'live';
+      }
+    }
+    
+    // Default behavior for other statuses
+    return auction.status;
+  } catch (error) {
+    console.error('Error getting auction status:', error);
+    return 'error';
+  }
+};
+
+// Create auction function
 const createAuction = async (req, res) => {
   try {
     console.log('Create auction request received');
     console.log('Request user:', req.user);
     console.log('Request body:', req.body);
 
-    // Check if user is authenticated
+    // Check authentication
     if (!req.user || !req.user.id) {
       console.log('Authentication failed - no user or user ID');
       return res.status(401).json({ 
@@ -37,7 +146,7 @@ const createAuction = async (req, res) => {
       created_by_name
     } = req.body;
     
-    // Validate input
+    // Validate required fields
     if (!title || !auction_date || !start_time || !duration_minutes || 
         !selected_bidders?.length || !category || !sbu || !created_by_name) {
       return res.status(400).json({ 
@@ -46,7 +155,7 @@ const createAuction = async (req, res) => {
       });
     }
 
-    // Validate SBU is one of the allowed values
+    // Validate SBU
     const allowedSBUs = ['SBU1', 'SBU2', 'SBU3', 'SBU4'];
     if (!allowedSBUs.includes(sbu)) {
       return res.status(400).json({
@@ -55,7 +164,7 @@ const createAuction = async (req, res) => {
       });
     }
 
-    // FIXED: Validate auction date/time is in future (Sri Lanka time)
+    // Validate auction date/time is in future (Sri Lanka time)
     const nowSL = getCurrentSLTime();
     const auctionDateTime = moment.tz(`${auction_date} ${start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
     
@@ -95,7 +204,7 @@ const createAuction = async (req, res) => {
       });
     }
 
-    // Get last auction ID
+    // Generate auction ID
     const { data: lastAuction, error: lastAuctionError } = await query(
       'SELECT auction_id FROM auctions ORDER BY auction_id DESC LIMIT 1'
     );
@@ -110,7 +219,7 @@ const createAuction = async (req, res) => {
     
     // Create auction with transaction
     const result = await transaction(async (connection) => {
-      // Insert auction - All new auctions start as 'pending' and need approval
+      // Insert auction - starts as 'pending' for approval
       console.log('Creating auction with pending status for approval workflow');
       
       const [auctionResult] = await connection.execute(
@@ -133,7 +242,7 @@ const createAuction = async (req, res) => {
           start_time, 
           duration_minutes, 
           special_notices || null, 
-          'pending', // All new auctions start as pending
+          'pending',
           category,
           sbu,
           created_by_name
@@ -180,8 +289,6 @@ const createAuction = async (req, res) => {
     
     console.log('Auction created successfully and is pending approval:', result.data);
     
-    // NOTE: NO EMAIL SENDING HERE - Emails are only sent when auction is approved
-    
     res.json({ 
       success: true, 
       auction: result.data.auction, 
@@ -199,15 +306,13 @@ const createAuction = async (req, res) => {
   }
 };
 
-
-
-// FIXED: Updated getAuction function with better error handling
+// Get specific auction details
 const getAuction = async (req, res) => {
   try {
     const { auctionId } = req.params;
     console.log('Getting auction details for:', auctionId);
 
-    // STEP 1: Get basic auction details
+    // Get basic auction details
     const { data: auction, error: auctionError } = await query(`
       SELECT 
         a.id,
@@ -250,14 +355,8 @@ const getAuction = async (req, res) => {
 
     const auctionData = auction[0];
     console.log('Found auction:', auctionData.auction_id);
-    console.log('Auction raw data:', {
-      auction_date: auctionData.auction_date,
-      start_time: auctionData.start_time,
-      duration_minutes: auctionData.duration_minutes,
-      status: auctionData.status
-    });
 
-    // STEP 2: Get invited bidders separately
+    // Get invited bidders
     const { data: invitedBidders, error: biddersError } = await query(`
       SELECT 
         u.id as bidder_id,
@@ -280,7 +379,7 @@ const getAuction = async (req, res) => {
       auctionData.invited_bidders = invitedBidders || [];
     }
 
-    // STEP 3: Get bid statistics
+    // Get bid statistics
     const { data: bidStats, error: bidStatsError } = await query(`
       SELECT 
         COUNT(*) as total_bids,
@@ -303,40 +402,10 @@ const getAuction = async (req, res) => {
       auctionData.average_bid = null;
     }
 
-    // STEP 4: Get auction results (if ended)
-    const { data: auctionResults, error: resultsError } = await query(`
-      SELECT 
-        ar.winner_id,
-        ar.winning_amount,
-        ar.ended_at,
-        u.user_id as winner_user_id,
-        u.name as winner_name
-      FROM auction_results ar
-      LEFT JOIN users u ON ar.winner_id = u.id
-      WHERE ar.auction_id = ?
-      LIMIT 1
-    `, [auctionData.id]);
-
-    if (!resultsError && auctionResults && auctionResults.length > 0) {
-      auctionData.result_info = {
-        winner_id: auctionResults[0].winner_id,
-        winner_user_id: auctionResults[0].winner_user_id,
-        winner_name: auctionResults[0].winner_name,
-        winning_amount: auctionResults[0].winning_amount,
-        ended_at: auctionResults[0].ended_at
-      };
-    } else {
-      auctionData.result_info = null;
-    }
-
-    // STEP 5: Add calculated status and timing info with proper error handling
+    // Add calculated status and timing info
     try {
-      console.log('Calculating auction status...');
       auctionData.calculated_status = getAuctionStatus(auctionData);
-      console.log('Calculated status:', auctionData.calculated_status);
-      
       auctionData.is_live = isAuctionLive(auctionData);
-      console.log('Is live:', auctionData.is_live);
       
       // Add formatted datetime for easier frontend consumption
       if (auctionData.auction_date && auctionData.start_time) {
@@ -353,34 +422,14 @@ const getAuction = async (req, res) => {
             const nowSL = getCurrentSLTime();
             auctionData.time_remaining_ms = Math.max(0, endDateTime.diff(nowSL, 'milliseconds'));
           }
-        } else {
-          console.error('Invalid datetime for formatting:', `${auctionData.auction_date} ${auctionData.start_time}`);
-          auctionData.start_datetime_formatted = null;
-          auctionData.end_datetime_formatted = null;
-          auctionData.date_time = `${auctionData.auction_date} ${auctionData.start_time}`;
         }
-      } else {
-        console.error('Missing date/time data for auction:', auctionData.auction_id);
-        auctionData.start_datetime_formatted = null;
-        auctionData.end_datetime_formatted = null;
-        auctionData.date_time = null;
       }
       
     } catch (statusError) {
       console.error('Error calculating auction status:', statusError);
       auctionData.calculated_status = auctionData.status;
       auctionData.is_live = false;
-      auctionData.start_datetime_formatted = null;
-      auctionData.end_datetime_formatted = null;
     }
-
-    console.log(`Auction details prepared for ${auctionData.auction_id}:`, {
-      status: auctionData.status,
-      calculated_status: auctionData.calculated_status,
-      is_live: auctionData.is_live,
-      invited_bidders_count: auctionData.invited_bidders.length,
-      total_bids: auctionData.total_bids
-    });
 
     res.json({
       success: true,
@@ -397,8 +446,6 @@ const getAuction = async (req, res) => {
     });
   }
 };
-
-
 
 // Get all auctions (with filtering) - UPDATED for approval workflow
 const getAllAuctions = async (req, res) => {
@@ -474,405 +521,87 @@ const getAllAuctions = async (req, res) => {
   }
 };
 
-
-
-
-
-// FIXED: Function to update auction statuses in database with proper timezone
-const updateAuctionStatuses = async () => {
-  try {
-    console.log('Updating auction statuses...');
-    const { data: auctions, error } = await query(
-      'SELECT id, auction_id, auction_date, start_time, duration_minutes, status FROM auctions WHERE status IN (?, ?, ?)',
-      ['approved', 'live', 'ended']
-    );
-    
-    if (error) {
-      console.error('Error fetching auctions for status update:', error);
-      return;
-    }
-
-    const nowSL = getCurrentSLTime();
-    console.log('Current SL time for status update:', nowSL.format('YYYY-MM-DD HH:mm:ss'));
-
-    for (const auction of auctions) {
-      let newStatus = auction.status;
-      
-      // Only update status for approved auctions
-      if (auction.status === 'approved') {
-        const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-        const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
-        
-        if (nowSL.isSameOrAfter(startDateTime) && nowSL.isBefore(endDateTime)) {
-          newStatus = 'live';
-        } else if (nowSL.isSameOrAfter(endDateTime)) {
-          newStatus = 'ended';
-        }
-      } else if (auction.status === 'live') {
-        const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-        const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
-        
-        if (nowSL.isSameOrAfter(endDateTime)) {
-          newStatus = 'ended';
-        }
-      }
-      
-      // Only update if status has changed
-      if (auction.status !== newStatus) {
-        await query(
-          'UPDATE auctions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          [newStatus, auction.id]
-        );
-        console.log(`Updated auction ${auction.auction_id} status from ${auction.status} to ${newStatus}`);
-      }
-    }
-  } catch (error) {
-    console.error('Error updating auction statuses:', error);
-  }
-};
-
-
-// Get auction results with proper timezone handling
-const getAuctionResults = async (req, res) => {
-  try {
-    // Get all auctions
-    const { data: auctions, error: auctionsError } = await query(
-      'SELECT * FROM auctions ORDER BY auction_date DESC, start_time DESC'
-    );
-
-    if (auctionsError) {
-      console.error('Get auction results error:', auctionsError);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch auction results'
-      });
-    }
-
-    const results = await Promise.all(
-      auctions.map(async (auction) => {
-        try {
-          // Check if auction has ended using Sri Lanka time
-          const auctionStatus = getAuctionStatus(auction);
-          const hasEnded = auctionStatus === 'ended' || auction.status === 'cancelled';
-
-          if (!hasEnded && auction.status !== 'cancelled') {
-            return null; // Skip ongoing auctions
-          }
-
-          // Get winner information for ended auctions
-          let winner = null;
-          let winningPrice = null;
-
-          if (auction.status !== 'cancelled') {
-            // Get all bids for this auction
-            const { data: auctionBids } = await query(`
-              SELECT b.bidder_id, b.amount, b.bid_time,
-                     u.user_id, u.name, u.company
-              FROM bids b
-              JOIN users u ON b.bidder_id = u.id
-              WHERE b.auction_id = ?
-            `, [auction.id]);
-
-            if (auctionBids && auctionBids.length > 0) {
-              // Group by bidder and get their lowest bid
-              const bidderLowestBids = {};
-              auctionBids.forEach(bid => {
-                const bidderId = bid.bidder_id;
-                if (!bidderLowestBids[bidderId] || bid.amount < bidderLowestBids[bidderId].amount) {
-                  bidderLowestBids[bidderId] = {
-                    amount: bid.amount,
-                    bid_time: bid.bid_time,
-                    user_id: bid.user_id,
-                    name: bid.name,
-                    company: bid.company
-                  };
-                }
-              });
-
-              // Find the winner (lowest amount, earliest time if tie)
-              if (Object.keys(bidderLowestBids).length > 0) {
-                const sortedBidders = Object.entries(bidderLowestBids)
-                  .sort(([, bidA], [, bidB]) => {
-                    if (bidA.amount === bidB.amount) {
-                      return new Date(bidA.bid_time) - new Date(bidB.bid_time);
-                    }
-                    return bidA.amount - bidB.amount;
-                  });
-
-                const [winnerId, winnerInfo] = sortedBidders[0];
-                winner = {
-                  bidder_id: winnerId,
-                  user_id: winnerInfo.user_id,
-                  name: winnerInfo.name,
-                  company: winnerInfo.company
-                };
-                winningPrice = winnerInfo.amount;
-              }
-            }
-          }
-
-          return {
-            auction_id: auction.auction_id,
-            title: auction.title,
-            auction_date: auction.auction_date,
-            start_time: auction.start_time,
-            status: hasEnded ? (auction.status === 'cancelled' ? 'cancelled' : 'completed') : auction.status,
-            winning_bidder_id: winner?.user_id || null,
-            bidder_name: winner?.name || null,
-            bidder_company: winner?.company || null,
-            winning_price: winningPrice
-          };
-
-        } catch (error) {
-          console.error(`Error processing auction ${auction.id}:`, error);
-          return {
-            auction_id: auction.auction_id,
-            title: auction.title,
-            auction_date: auction.auction_date,
-            start_time: auction.start_time,
-            status: 'error',
-            winning_bidder_id: null,
-            bidder_name: null,
-            bidder_company: null,
-            winning_price: null
-          };
-        }
-      })
-    );
-
-    // Filter out null results (ongoing auctions) and sort by date
-    const filteredResults = results
-      .filter(result => result !== null)
-      .sort((a, b) => new Date(b.auction_date) - new Date(a.auction_date));
-
-    res.json({
-      success: true,
-      results: filteredResults,
-      current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
-    });
-
-  } catch (error) {
-    console.error('Get auction results error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-};
-
-
-
-const getLiveRankings = async (req, res) => {
-  try {
-    const { auctionId } = req.params;
-
-    // Get all bids for this auction with bidder information
-    const { data: allBids, error } = await query(`
-      SELECT b.bidder_id, b.amount, b.bid_time,
-             u.user_id, u.name, u.company
-      FROM bids b
-      JOIN users u ON b.bidder_id = u.id
-      WHERE b.auction_id = ?
-      ORDER BY b.bid_time DESC
-    `, [auctionId]);
-
-    if (error) {
-      console.error('Get rankings error:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch rankings'
-      });
-    }
-
-    if (!allBids || allBids.length === 0) {
-      return res.json({
-        success: true,
-        rankings: []
-      });
-    }
-
-    // Group by bidder and get their lowest bid (reverse auction - lowest wins)
-    const bidderLowestBids = {};
-    allBids.forEach(bid => {
-      const bidderId = bid.bidder_id;
-      if (!bidderLowestBids[bidderId] || bid.amount < bidderLowestBids[bidderId].amount) {
-        bidderLowestBids[bidderId] = {
-          bidder_id: bidderId,
-          amount: bid.amount,
-          bid_time: bid.bid_time,
-          user_id: bid.user_id,
-          name: bid.name,
-          company: bid.company
-        };
-      }
-    });
-
-    // Convert to array and sort by amount (lowest first = rank 1)
-    const rankings = Object.values(bidderLowestBids)
-      .sort((a, b) => a.amount - b.amount);
-
-    res.json({
-      success: true,
-      rankings: rankings || [],
-      current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
-    });
-
-  } catch (error) {
-    console.error('Get live rankings error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-};
-
-const getAdminAuctionRankings = async (req, res) => {
-  try {
-    const { auctionId } = req.params;
-
-    // Get all bids for this auction with bidder information
-    const { data: allBids, error } = await query(`
-      SELECT b.bidder_id, b.amount, b.bid_time,
-             u.user_id, u.name, u.company
-      FROM bids b
-      JOIN users u ON b.bidder_id = u.id
-      WHERE b.auction_id = ?
-      ORDER BY b.bid_time DESC
-    `, [auctionId]);
-
-    if (error) {
-      console.error('Get admin auction rankings error:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch rankings'
-      });
-    }
-
-    if (!allBids || allBids.length === 0) {
-      return res.json({
-        success: true,
-        rankings: []
-      });
-    }
-
-    // Group by bidder and get their lowest bid (reverse auction - lowest wins)
-    const bidderLowestBids = {};
-    allBids.forEach(bid => {
-      const bidderId = bid.bidder_id;
-      if (!bidderLowestBids[bidderId] || bid.amount < bidderLowestBids[bidderId].amount) {
-        bidderLowestBids[bidderId] = {
-          bidder_id: bidderId,
-          amount: bid.amount,
-          bid_time: bid.bid_time,
-          user_id: bid.user_id,
-          name: bid.name,
-          company: bid.company
-        };
-      }
-    });
-
-    // Convert to array and sort by amount (lowest first = rank 1)
-    const rankings = Object.values(bidderLowestBids)
-      .sort((a, b) => a.amount - b.amount);
-
-    res.json({
-      success: true,
-      rankings,
-      current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
-    });
-
-  } catch (error) {
-    console.error('Get admin auction rankings error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-};
-
-// UPDATED: getAllAuctionsAdmin to include approval info
+// Get all auctions for admin view
 const getAllAuctionsAdmin = async (req, res) => {
-    try {
-        // Get all auctions with invited bidders' names and approval info
-        const { data: auctions, error } = await query(`
-            SELECT 
-                a.auction_id AS AuctionID,
-                a.title AS Title,
-                a.category,
-                a.sbu,
-                CONCAT(a.auction_date, ' ', a.start_time) AS DateTime,
-                a.duration_minutes AS Duration,
-                a.status AS Status,
-                a.approved_by,
-                a.approved_at,
-                a.rejected_by,
-                a.rejected_at,
-                GROUP_CONCAT(u.name SEPARATOR ', ') AS InvitedBidders
-            FROM 
-                auctions a
-            LEFT JOIN 
-                auction_bidders ab ON a.id = ab.auction_id
-            LEFT JOIN 
-                users u ON ab.bidder_id = u.id
-            GROUP BY 
-                a.id
-            ORDER BY 
-                a.auction_date DESC, a.start_time DESC
-        `);
+  try {
+    // Get all auctions with invited bidders' names and approval info
+    const { data: auctions, error } = await query(`
+      SELECT 
+        a.auction_id AS AuctionID,
+        a.title AS Title,
+        a.category,
+        a.sbu,
+        CONCAT(a.auction_date, ' ', a.start_time) AS DateTime,
+        a.duration_minutes AS Duration,
+        a.status AS Status,
+        a.approved_by,
+        a.approved_at,
+        a.rejected_by,
+        a.rejected_at,
+        GROUP_CONCAT(u.name SEPARATOR ', ') AS InvitedBidders
+      FROM 
+        auctions a
+      LEFT JOIN 
+        auction_bidders ab ON a.id = ab.auction_id
+      LEFT JOIN 
+        users u ON ab.bidder_id = u.id
+      GROUP BY 
+        a.id
+      ORDER BY 
+        a.auction_date DESC, a.start_time DESC
+    `);
 
-        if (error) {
-            console.error('Error fetching auctions:', error);
-            return res.status(500).json({
-                success: false,
-                error: 'Failed to fetch auctions'
-            });
-        }
-
-        // Add calculated status for each auction
-        const auctionsWithStatus = auctions.map(auction => {
-          // Parse the DateTime back to separate date/time for status calculation
-          const [date, time] = auction.DateTime.split(' ');
-          const calculatedStatus = getAuctionStatus({
-            auction_date: date,
-            start_time: time,
-            duration_minutes: auction.Duration,
-            status: auction.Status
-          });
-          
-          return {
-            AuctionID: auction.AuctionID,
-            Title: auction.Title,
-            Category: auction.category,
-            SBU: auction.sbu,
-            DateTime: auction.DateTime,
-            Duration: `${auction.Duration} minutes`,
-            Status: calculatedStatus.charAt(0).toUpperCase() + calculatedStatus.slice(1),
-            InvitedBidders: auction.InvitedBidders || 'No bidders invited',
-            calculated_status: calculatedStatus,
-            approved_by: auction.approved_by,
-            approved_at: auction.approved_at,
-            rejected_by: auction.rejected_by,
-            rejected_at: auction.rejected_at
-          };
-        });
-
-        res.status(200).json({
-            success: true,
-            auctions: auctionsWithStatus,
-            current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
-        });
-    } catch (error) {
-        console.error('Error fetching auctions:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Internal server error'
-        });
+    if (error) {
+      console.error('Error fetching auctions:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch auctions'
+      });
     }
+
+    // Add calculated status for each auction
+    const auctionsWithStatus = auctions.map(auction => {
+      // Parse the DateTime back to separate date/time for status calculation
+      const [date, time] = auction.DateTime.split(' ');
+      const calculatedStatus = getAuctionStatus({
+        auction_date: date,
+        start_time: time,
+        duration_minutes: auction.Duration,
+        status: auction.Status
+      });
+      
+      return {
+        AuctionID: auction.AuctionID,
+        Title: auction.Title,
+        Category: auction.category,
+        SBU: auction.sbu,
+        DateTime: auction.DateTime,
+        Duration: `${auction.Duration} minutes`,
+        Status: calculatedStatus.charAt(0).toUpperCase() + calculatedStatus.slice(1),
+        InvitedBidders: auction.InvitedBidders || 'No bidders invited',
+        calculated_status: calculatedStatus,
+        approved_by: auction.approved_by,
+        approved_at: auction.approved_at,
+        rejected_by: auction.rejected_by,
+        rejected_at: auction.rejected_at
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      auctions: auctionsWithStatus,
+      current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
+    });
+  } catch (error) {
+    console.error('Error fetching auctions:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
 };
 
-
-// Updated approveAuction function with proper foreign key handling and email notifications
-
+// Approve auction function
 const approveAuction = async (req, res) => {
   try {
     const { auctionId } = req.params;
@@ -887,7 +616,7 @@ const approveAuction = async (req, res) => {
       });
     }
 
-    // Get the actual system admin user ID from database
+    // Get the system admin user ID from database
     const { data: sysAdminUser, error: userError } = await query(
       'SELECT id, name, user_id FROM users WHERE user_id = ? AND role = ?',
       ['SYSADMIN', 'system_admin']
@@ -901,7 +630,7 @@ const approveAuction = async (req, res) => {
       });
     }
 
-    const approvedByUserId = sysAdminUser[0].id; // This is the UUID from users table
+    const approvedByUserId = sysAdminUser[0].id;
 
     // Get auction with invited bidders
     const { data: auction, error: fetchError } = await query(`
@@ -931,7 +660,7 @@ const approveAuction = async (req, res) => {
       });
     }
 
-    // Update auction status to approved with correct user ID
+    // Update auction status to approved
     const { error: updateError } = await query(
       `UPDATE auctions SET 
         status = 'approved', 
@@ -939,7 +668,7 @@ const approveAuction = async (req, res) => {
         approved_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP 
       WHERE id = ?`,
-      [approvedByUserId, auctionData.id] // Use the UUID, not the name
+      [approvedByUserId, auctionData.id]
     );
 
     if (updateError) {
@@ -949,7 +678,7 @@ const approveAuction = async (req, res) => {
 
     console.log('Auction approved successfully:', auctionData.auction_id);
 
-    // Send email notifications to invited bidders ONLY after approval
+    // Send email notifications to invited bidders
     if (auctionData.bidder_ids) {
       try {
         const bidderIds = auctionData.bidder_ids.split(',');
@@ -967,7 +696,7 @@ const approveAuction = async (req, res) => {
           
           const emailPromises = bidders.map(async (bidder) => {
             const emailHTML = `
-              <h2>🎯 Auction Approved & Ready - Anunine Holdings Pvt Ltd</h2>
+              <h2>🎯 Auction Approved & Ready - E-Auction System</h2>
               <p>Dear ${bidder.name},</p>
               <p><strong>Great news!</strong> The auction you were invited to participate in has been <span style="color: #28a745; font-weight: bold;">APPROVED</span> and is now ready for bidding:</p>
               
@@ -996,8 +725,7 @@ const approveAuction = async (req, res) => {
               <p>Please ensure you're logged in and ready to participate at the scheduled time.</p>
               <br>
               <p>Best regards,<br>
-              <strong>Anunine Holdings Pvt Ltd</strong><br>
-              E-Auction System</p>
+              <strong>E-Auction System</strong></p>
               
               <hr style="margin: 20px 0;">
               <p style="font-size: 12px; color: #666;">
@@ -1041,8 +769,6 @@ const approveAuction = async (req, res) => {
     });
   }
 };
-
-
 
 // Reject auction function
 const rejectAuction = async (req, res) => {
@@ -1096,10 +822,11 @@ const rejectAuction = async (req, res) => {
         status = 'rejected', 
         rejected_by = ?, 
         rejected_at = CURRENT_TIMESTAMP,
+        rejection_reason = ?,
         special_notices = ?,
         updated_at = CURRENT_TIMESTAMP 
       WHERE id = ?`,
-      [rejectedBy, updatedSpecialNotices, auctionData.id]
+      [rejectedBy, reason, updatedSpecialNotices, auctionData.id]
     );
 
     if (updateError) {
@@ -1125,7 +852,60 @@ const rejectAuction = async (req, res) => {
   }
 };
 
+// Function to update auction statuses based on current time
+const updateAuctionStatuses = async () => {
+  try {
+    console.log('Updating auction statuses...');
+    const { data: auctions, error } = await query(
+      'SELECT id, auction_id, auction_date, start_time, duration_minutes, status FROM auctions WHERE status IN (?, ?)',
+      ['approved', 'live']
+    );
+    
+    if (error) {
+      console.error('Error fetching auctions for status update:', error);
+      return;
+    }
 
+    const nowSL = getCurrentSLTime();
+    console.log('Current SL time for status update:', nowSL.format('YYYY-MM-DD HH:mm:ss'));
+
+    for (const auction of auctions) {
+      let newStatus = auction.status;
+      
+      // Only update status for approved auctions
+      if (auction.status === 'approved') {
+        const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+        const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+        
+        if (nowSL.isSameOrAfter(startDateTime) && nowSL.isBefore(endDateTime)) {
+          newStatus = 'live';
+        } else if (nowSL.isSameOrAfter(endDateTime)) {
+          newStatus = 'ended';
+        }
+      } else if (auction.status === 'live') {
+        const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+        const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+        
+        if (nowSL.isSameOrAfter(endDateTime)) {
+          newStatus = 'ended';
+        }
+      }
+      
+      // Only update if status has changed
+      if (auction.status !== newStatus) {
+        await query(
+          'UPDATE auctions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          [newStatus, auction.id]
+        );
+        console.log(`Updated auction ${auction.auction_id} status from ${auction.status} to ${newStatus}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error updating auction statuses:', error);
+  }
+};
+
+// Update auction function
 const updateAuction = async (req, res) => {
   try {
     const { auctionId } = req.params;
@@ -1142,7 +922,7 @@ const updateAuction = async (req, res) => {
 
     console.log('Update auction request:', { auctionId, body: req.body });
 
-    // Check if user is authenticated
+    // Check authentication
     if (!req.user || !req.user.id) {
       return res.status(401).json({ 
         success: false, 
@@ -1150,7 +930,7 @@ const updateAuction = async (req, res) => {
       });
     }
 
-    // Get the auction to check its current status
+    // Get existing auction
     const { data: existingAuction, error: fetchError } = await query(
       'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
       [auctionId, auctionId]
@@ -1166,7 +946,7 @@ const updateAuction = async (req, res) => {
 
     const auction = existingAuction[0];
     
-    // Check if auction can be updated (not started yet)
+    // Check if auction can be updated (not live or ended)
     const auctionStatus = getAuctionStatus(auction);
     if (auctionStatus === 'live' || auctionStatus === 'ended') {
       return res.status(400).json({
@@ -1220,12 +1000,6 @@ const updateAuction = async (req, res) => {
     // Update auction with transaction
     const result = await transaction(async (connection) => {
       // Update auction details
-      const newStatus = getAuctionStatus({ 
-        auction_date, 
-        start_time, 
-        duration_minutes 
-      });
-
       await connection.execute(
         `UPDATE auctions SET 
           title = ?, 
@@ -1233,7 +1007,6 @@ const updateAuction = async (req, res) => {
           start_time = ?, 
           duration_minutes = ?, 
           special_notices = ?, 
-          status = ?,
           category = ?,
           sbu = ?,
           updated_at = CURRENT_TIMESTAMP
@@ -1244,7 +1017,6 @@ const updateAuction = async (req, res) => {
           start_time, 
           duration_minutes, 
           special_notices || null,
-          newStatus,
           category,
           sbu,
           auction.id
@@ -1300,17 +1072,14 @@ const updateAuction = async (req, res) => {
   }
 };
 
-/**
- * Delete auction
- * Only allows deletion if auction hasn't started yet or has no bids
- */
+// Delete auction function
 const deleteAuction = async (req, res) => {
   try {
     const { auctionId } = req.params;
 
     console.log('Delete auction request:', auctionId);
 
-    // Check if user is authenticated
+    // Check authentication
     if (!req.user || !req.user.id) {
       return res.status(401).json({ 
         success: false, 
@@ -1318,7 +1087,7 @@ const deleteAuction = async (req, res) => {
       });
     }
 
-    // Get the auction to check its current status
+    // Get existing auction
     const { data: existingAuction, error: fetchError } = await query(
       'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
       [auctionId, auctionId]
@@ -1343,7 +1112,7 @@ const deleteAuction = async (req, res) => {
       });
     }
 
-    // Check if there are any bids for this auction
+    // Check if there are any bids
     const { data: existingBids, error: bidsError } = await query(
       'SELECT COUNT(*) as bid_count FROM bids WHERE auction_id = ?',
       [auction.id]
@@ -1364,9 +1133,8 @@ const deleteAuction = async (req, res) => {
       });
     }
 
-    // Delete auction with transaction (cascade will handle related records)
+    // Delete auction with transaction
     const result = await transaction(async (connection) => {
-      // Delete auction (cascade will handle auction_bidders)
       await connection.execute(
         'DELETE FROM auctions WHERE id = ?',
         [auction.id]
@@ -1397,147 +1165,17 @@ const deleteAuction = async (req, res) => {
   }
 };
 
-/**
- * Get auction statistics for admin view
- */
-const getAuctionStatistics = async (req, res) => {
-  try {
-    const { auctionId } = req.params;
-
-    console.log('Get auction statistics request:', auctionId);
-
-    // Get auction details
-    const { data: auction, error: auctionError } = await query(
-      'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
-      [auctionId, auctionId]
-    );
-
-    if (auctionError || !auction || auction.length === 0) {
-      console.error('Auction not found:', auctionError);
-      return res.status(404).json({
-        success: false,
-        error: 'Auction not found'
-      });
-    }
-
-    const auctionData = auction[0];
-
-    // Get invited bidders count
-    const { data: invitedCount } = await query(
-      'SELECT COUNT(*) as count FROM auction_bidders WHERE auction_id = ?',
-      [auctionData.id]
-    );
-
-    // Get total bids count
-    const { data: totalBids } = await query(
-      'SELECT COUNT(*) as count FROM bids WHERE auction_id = ?',
-      [auctionData.id]
-    );
-
-    // Get unique bidders count (who actually placed bids)
-    const { data: activeBidders } = await query(
-      'SELECT COUNT(DISTINCT bidder_id) as count FROM bids WHERE auction_id = ?',
-      [auctionData.id]
-    );
-
-    // Get bid statistics
-    const { data: bidStats } = await query(
-      `SELECT 
-        MIN(amount) as lowest_bid,
-        MAX(amount) as highest_bid,
-        AVG(amount) as average_bid,
-        COUNT(*) as total_bids
-      FROM bids WHERE auction_id = ?`,
-      [auctionData.id]
-    );
-
-    // Get time-based bid distribution (bids per hour)
-    const { data: bidDistribution } = await query(
-      `SELECT 
-        HOUR(bid_time) as hour,
-        COUNT(*) as bid_count
-      FROM bids 
-      WHERE auction_id = ?
-      GROUP BY HOUR(bid_time)
-      ORDER BY hour`,
-      [auctionData.id]
-    );
-
-    // Calculate auction status and timing info
-    const currentStatus = getAuctionStatus(auctionData);
-    const nowSL = getCurrentSLTime();
-    const startDateTime = moment.tz(`${auctionData.auction_date} ${auctionData.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-    const endDateTime = startDateTime.clone().add(auctionData.duration_minutes, 'minutes');
-
-    const statistics = {
-      auction_info: {
-        id: auctionData.auction_id,
-        title: auctionData.title,
-        status: currentStatus,
-        category: auctionData.category,
-        sbu: auctionData.sbu
-      },
-      participation: {
-        invited_bidders: invitedCount[0].count,
-        active_bidders: activeBidders[0].count,
-        participation_rate: invitedCount[0].count > 0 
-          ? ((activeBidders[0].count / invitedCount[0].count) * 100).toFixed(2)
-          : 0
-      },
-      bidding: {
-        total_bids: totalBids[0].count,
-        lowest_bid: bidStats[0].lowest_bid,
-        highest_bid: bidStats[0].highest_bid,
-        average_bid: bidStats[0].average_bid ? parseFloat(bidStats[0].average_bid).toFixed(2) : null,
-        bid_distribution: bidDistribution
-      },
-      timing: {
-        start_time: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
-        end_time: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
-        duration_minutes: auctionData.duration_minutes,
-        time_remaining: currentStatus === 'live' ? endDateTime.diff(nowSL, 'milliseconds') : null
-      }
-    };
-
-    res.json({
-      success: true,
-      statistics,
-      current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss')
-    });
-
-  } catch (error) {
-    console.error('Get auction statistics error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
-
 module.exports = {
-createAuction,
-getAuction,
-updateAuction,
-deleteAuction,
-approveAuction,
-rejectAuction,
-getAllAuctionsAdmin,
-
-
-getLiveAuction,
-isAuctionLive,
-getAuctionStatus,
-getAllAuctions,
-getAdminLiveAuctions,
-updateAuctionStatuses,
-getAuctionResults,
-getAuction,
-getLiveRankings,
-getAdminAuctionRankings,
-
-
-
-getAuctionStatistics,
-getCurrentSLTime,  // Add this line - it was missing
+  createAuction,
+  getAuction,
+  getAllAuctions,
+  getAllAuctionsAdmin,
+  approveAuction,
+  rejectAuction,
+  updateAuction,
+  deleteAuction,
+  updateAuctionStatuses,
+  isAuctionLive,
+  getAuctionStatus,
+  getCurrentSLTime
 };

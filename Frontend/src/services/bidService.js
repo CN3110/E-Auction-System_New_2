@@ -12,9 +12,10 @@ axios.interceptors.request.use(config => {
   return config;
 });
 
-export const getLiveAuctions = async () => {
+//get live auctions for invited bidders
+export const getLiveAuctionsForBidder = async () => {
   try {
-    const response = await axios.get(`http://localhost:5000/api/auction/bidder/live`);
+    const response = await axios.get(`http://localhost:5000/api/auction/live/bidder`);
     return response.data.auction;
   } catch (error) {
     console.error('Error fetching live auction:', error);

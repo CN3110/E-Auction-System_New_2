@@ -1,19 +1,28 @@
+// Backend/Routes/auctionRoutes.js
 const express = require('express');
 const router = express.Router();
+
+// Import auction controllers
 const { 
   createAuction,
-  getLiveAuction,
   getAllAuctions,
   getAuction,
-  getLiveRankings,
   getAllAuctionsAdmin,
   updateAuction,
   deleteAuction,
-  getAuctionStatistics,
-  getAdminAuctionRankings,
   approveAuction,
   rejectAuction
 } = require('../Controllers/auctionController');
+
+// Import live auction controllers
+const {
+  getLiveAuctionsForBidder,
+  getLiveAuctionDetails,
+  getLiveAuctionRankings,
+  checkAuctionLiveStatus
+} = require('../Controllers/liveAuction');
+
+// Import middleware
 const { 
   authenticateToken, 
   requireAdmin, 
@@ -22,47 +31,46 @@ const {
   requireAdminOrSystemAdmin 
 } = require('../Middleware/auth');
 
-// Create auction (admin only) - FIXED: Added proper authentication
+// ===== AUCTION MANAGEMENT ROUTES =====
+
+// Create auction (admin only)
 router.post('/create', authenticateToken, requireAdmin, createAuction);
 
 // Get all auctions for admin with filters and pagination
-router.get('/', authenticateToken, requireAdminOrSystemAdmin, getAllAuctionsAdmin);
+router.get('/admin/all', authenticateToken, requireAdminOrSystemAdmin, getAllAuctionsAdmin);
 
-// Get live auction for logged bidder
-router.get('/bidder/live', authenticateToken, requireBidder, getLiveAuction);
+// Get all auctions (role-based filtering)
+router.get('/all', authenticateToken, getAllAuctions);
 
 // Approval endpoints (System Admin only)
 router.post('/:auctionId/approve', authenticateToken, requireSystemAdmin, approveAuction);
 router.post('/:auctionId/reject', authenticateToken, requireSystemAdmin, rejectAuction);
 
+// Update auction details (Admin only)
+router.put('/:auctionId', authenticateToken, requireAdmin, updateAuction);
+
+// Delete auction (Admin only)
+router.delete('/:auctionId', authenticateToken, requireAdmin, deleteAuction);
+
 // Get specific auction details
 router.get('/:auctionId', authenticateToken, getAuction);
 
-// Get live rankings for an auction
-router.get('/:auctionId/rankings', authenticateToken, getLiveRankings);
+// ===== LIVE AUCTION ROUTES =====
 
-/**
- * Update auction details (Admin only)
- * PUT /api/auction/:auctionId
- */
-router.put('/:auctionId', authenticateToken, requireAdmin, updateAuction);
+// Get live auctions for bidders (only auctions they're invited to)
+router.get('/live/bidder', authenticateToken, requireBidder, getLiveAuctionsForBidder);
 
-/**
- * Delete auction (Admin only)
- * DELETE /api/auction/:auctionId
- */
-router.delete('/:auctionId', authenticateToken, requireAdmin, deleteAuction);
+// Get live auctions for admin (all live auctions)
+//router.get('/live/admin', authenticateToken, requireAdminOrSystemAdmin, getLiveAuctionsForAdmin);
 
-/**
- * Get auction statistics (Admin only)
- * GET /api/auction/:auctionId/statistics
- */
-router.get('/:auctionId/statistics', authenticateToken, requireAdmin, getAuctionStatistics);
+// Get specific live auction details
+router.get('/live/:auctionId/details', authenticateToken, getLiveAuctionDetails);
 
-/**
- * Get admin auction rankings (for detailed view)
- * GET /api/auction/:auctionId/admin-rankings
- */
-router.get('/:auctionId/admin-rankings', authenticateToken, requireAdminOrSystemAdmin, getAdminAuctionRankings);
+// Get live auction rankings
+router.get('/live/:auctionId/rankings', authenticateToken, getLiveAuctionRankings);
+
+// Check auction live status
+router.get('/live/:auctionId/status', authenticateToken, checkAuctionLiveStatus);
 
 module.exports = router;
+

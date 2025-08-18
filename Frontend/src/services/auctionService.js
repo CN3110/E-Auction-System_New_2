@@ -61,15 +61,17 @@ export const createAuction = async (auctionData) => {
   }
 };
 
+//get all auctions for admin
 export const getAllAuctions = async () => {
   try {
-    return await api.get('/auction/');
+    return await api.get('/auction/all');
   } catch (error) {
     console.error('Get all auctions error:', error);
     throw error;
   }
 };
 
+//get auction details for admin
 export const getAuctionDetails = async (auctionId) => {
   try {
     const response = await api.get(`/auction/${auctionId}`);

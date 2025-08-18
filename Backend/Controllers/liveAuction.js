@@ -1,399 +1,248 @@
-// FIXED: Updated getLiveAuction function with better debugging and error handling
-const getLiveAuction = async (req, res) => {
-  try {
-    const bidderId = req.user.id;
-    const nowSL = getCurrentSLTime();
-    
-    console.log('=== DEBUGGING LIVE AUCTION REQUEST ===');
-    console.log('Bidder ID:', bidderId);
-    console.log('Current SL time:', nowSL.format('YYYY-MM-DD HH:mm:ss'));
+const { query } = require('../Config/database');
+const moment = require('moment-timezone');
 
-    // STEP 1: Get ALL auctions the bidder is invited to (regardless of status)
-    const { data: allInvitedAuctions, error: invitedError } = await query(`
-      SELECT a.*, 
-             u.name as bidder_name,
-             u.user_id as bidder_user_id
-      FROM auctions a
-      JOIN auction_bidders ab ON a.id = ab.auction_id
-      JOIN users u ON ab.bidder_id = u.id
-      WHERE ab.bidder_id = ?
-      ORDER BY a.auction_date DESC, a.start_time DESC
-    `, [bidderId]);
-
-    if (invitedError) {
-      console.error('Error fetching invited auctions:', invitedError);
-      throw new Error('Error fetching invited auctions');
-    }
-
-    console.log(`Found ${allInvitedAuctions?.length || 0} total invited auctions`);
-    
-    if (allInvitedAuctions && allInvitedAuctions.length > 0) {
-      console.log('All invited auctions:');
-      allInvitedAuctions.forEach((auction, index) => {
-        console.log(`${index + 1}. ${auction.auction_id} - Status: ${auction.status} - Date: ${auction.auction_date} ${auction.start_time}`);
-      });
-    }
-
-    // STEP 2: Filter for approved/live status auctions
-    const approvedAuctions = allInvitedAuctions?.filter(a => 
-      a.status === 'approved' || a.status === 'live'
-    ) || [];
-
-    console.log(`Found ${approvedAuctions.length} approved/live auctions`);
-
-    if (approvedAuctions.length === 0) {
-      console.log('No approved/live auctions found for this bidder');
-      
-      // Check if there are pending auctions that might need approval
-      const pendingAuctions = allInvitedAuctions?.filter(a => a.status === 'pending') || [];
-      let message = 'No approved auctions found';
-      
-      if (pendingAuctions.length > 0) {
-        message = `Found ${pendingAuctions.length} pending auction(s) awaiting approval`;
-        console.log('Pending auctions:', pendingAuctions.map(a => a.auction_id));
-      }
-
-      return res.status(200).json({
-        success: true,
-        count: 0,
-        auctions: [],
-        current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
-        debug: {
-          bidderId,
-          totalInvitedAuctions: allInvitedAuctions?.length || 0,
-          approvedAuctions: approvedAuctions.length,
-          pendingAuctions: pendingAuctions.length,
-          liveAuctionCount: 0
-        },
-        message
-      });
-    }
-
-    // STEP 3: Check each approved auction for live status with detailed logging
-    const liveAuctions = [];
-    
-    for (const auction of approvedAuctions) {
-      //console.log(`\n--- Checking auction ${auction.auction_id} for live status ---`);
-      //console.log(`Status: ${auction.status}`);
-      //console.log(`Date/Time: ${auction.auction_date} ${auction.start_time}`);
-      //console.log(`Duration: ${auction.duration_minutes} minutes`);
-      
-      // Create start and end times
-      const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-      const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
-      
-      //console.log(`Start (SL): ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
-      //console.log(`End (SL): ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
-      //console.log(`Current (SL): ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
-      
-      // Check if within time bounds
-      const isAfterStart = nowSL.isSameOrAfter(startDateTime);
-      const isBeforeEnd = nowSL.isBefore(endDateTime);
-      const isWithinTime = isAfterStart && isBeforeEnd;
-      
-      //console.log(`After start: ${isAfterStart}`);
-      //console.log(`Before end: ${isBeforeEnd}`);
-      //console.log(`Within time: ${isWithinTime}`);
-      
-      const isApproved = auction.status === 'approved' || auction.status === 'live';
-      const isLive = isApproved && isWithinTime;
-      
-      //console.log(`Is approved: ${isApproved}`);
-      //console.log(`Final is live: ${isLive}`);
-      
-      if (isLive) {
-        console.log(`✅ Auction ${auction.auction_id} is LIVE`);
-        liveAuctions.push(auction);
-      } else {
-        console.log(`❌ Auction ${auction.auction_id} is NOT live`);
-      }
-    }
-
-    console.log(`\nFinal result: ${liveAuctions.length} live auctions found`);
-
-    if (liveAuctions.length === 0) {
-      // Provide detailed feedback about why no auctions are live
-      const futureAuctions = approvedAuctions.filter(a => {
-        const startDateTime = moment.tz(`${a.auction_date} ${a.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-        return nowSL.isBefore(startDateTime);
-      });
-
-      const pastAuctions = approvedAuctions.filter(a => {
-        const startDateTime = moment.tz(`${a.auction_date} ${a.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-        const endDateTime = startDateTime.clone().add(a.duration_minutes, 'minutes');
-        return nowSL.isSameOrAfter(endDateTime);
-      });
-
-      let message = 'No auctions are currently live. ';
-      if (futureAuctions.length > 0) {
-        const nextAuction = futureAuctions[0];
-        const nextStart = moment.tz(`${nextAuction.auction_date} ${nextAuction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-        message += `Next auction "${nextAuction.title}" starts at ${nextStart.format('YYYY-MM-DD HH:mm:ss')} SL time.`;
-      } else if (pastAuctions.length > 0) {
-        message += 'All approved auctions have ended.';
-      }
-
-      return res.status(200).json({
-        success: true,
-        count: 0,
-        auctions: [],
-        current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
-        debug: {
-          bidderId,
-          totalInvitedAuctions: allInvitedAuctions?.length || 0,
-          approvedAuctions: approvedAuctions.length,
-          futureAuctions: futureAuctions.length,
-          pastAuctions: pastAuctions.length,
-          liveAuctionCount: 0
-        },
-        message
-      });
-    }
-
-    // STEP 4: Prepare response for live auctions
-    const enrichedLiveAuctions = liveAuctions.map(auction => {
-      const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-      const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
-      const timeRemaining = endDateTime.diff(nowSL, 'milliseconds');
-      
-      return {
-        ...auction,
-        calculated_status: 'live',
-        is_live: true,
-        time_remaining_ms: Math.max(0, timeRemaining),
-        start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
-        end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss')
-      };
-    });
-
-    console.log('=== RETURNING LIVE AUCTIONS ===');
-    enrichedLiveAuctions.forEach(auction => {
-      console.log(`${auction.auction_id}: ${auction.title} (${auction.time_remaining_ms}ms remaining)`);
-    });
-
-    res.status(200).json({
-      success: true,
-      count: enrichedLiveAuctions.length,
-      auctions: enrichedLiveAuctions,
-      current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
-      debug: {
-        bidderId,
-        totalInvitedAuctions: allInvitedAuctions?.length || 0,
-        approvedAuctions: approvedAuctions.length,
-        liveAuctionCount: enrichedLiveAuctions.length
-      }
-    });
-
-  } catch (err) {
-    console.error('Error fetching live auctions:', err);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to fetch live auctions',
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
-  }
+// Helper function to get current Sri Lanka time
+const getCurrentSLTime = () => {
+  return moment().tz('Asia/Colombo');
 };
 
-// FIXED: Updated isAuctionLive function with null safety
+// Helper function to check if auction should be live
 const isAuctionLive = (auction) => {
   try {
-    const nowSL = getCurrentSLTime();
-    
-    // FIXED: Add null/undefined checks
     if (!auction || !auction.auction_date || !auction.start_time) {
-      console.log(`isAuctionLive: Missing required auction data`);
-      console.log(`  - auction_date: ${auction?.auction_date}`);
-      console.log(`  - start_time: ${auction?.start_time}`);
       return false;
     }
+
+    const nowSL = getCurrentSLTime();
     
-    // Handle different date formats from database
+    // Handle different date formats
     let auctionDate = auction.auction_date;
     let auctionTime = auction.start_time;
     
-    // Handle date objects
     if (auctionDate instanceof Date) {
       auctionDate = moment(auctionDate).format('YYYY-MM-DD');
     }
     
-    // Convert to string if not already
+    // Convert to string and clean time format
     auctionDate = String(auctionDate);
     auctionTime = String(auctionTime);
     
-    // Handle time format - remove milliseconds if present
     if (auctionTime.includes('.')) {
       auctionTime = auctionTime.split('.')[0];
     }
     
-    // Create datetime string
-    const dateTimeString = `${auctionDate} ${auctionTime}`;
-    
-    console.log(`isAuctionLive debug for ${auction.auction_id || auction.id}:`);
-    console.log(`  - Raw auction_date: ${auction.auction_date} (type: ${typeof auction.auction_date})`);
-    console.log(`  - Raw start_time: ${auction.start_time} (type: ${typeof auction.start_time})`);
-    console.log(`  - Formatted dateTimeString: ${dateTimeString}`);
-    
-    // Try primary parsing method
-    let startDateTime = moment.tz(dateTimeString, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    // Create start and end datetime
+    const startDateTime = moment.tz(`${auctionDate} ${auctionTime}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    const endDateTime = startDateTime.clone().add(auction.duration_minutes || 0, 'minutes');
     
     if (!startDateTime.isValid()) {
-      console.log(`  - Primary parsing failed, trying alternative methods...`);
-      
-      // Alternative method 1: Parse date and time separately
-      const datePart = moment.tz(auctionDate, 'YYYY-MM-DD', 'Asia/Colombo');
-      const timeParts = auctionTime.split(':');
-      
-      if (timeParts.length < 2) {
-        console.log(`  - Invalid time format: ${auctionTime}`);
-        return false;
-      }
-      
-      const hours = parseInt(timeParts[0]) || 0;
-      const minutes = parseInt(timeParts[1]) || 0;
-      const seconds = parseInt(timeParts[2]) || 0;
-      
-      startDateTime = datePart.clone().hour(hours).minute(minutes).second(seconds);
-      
-      if (!startDateTime.isValid()) {
-        console.log(`  - Alternative parsing also failed`);
-        return false;
-      } else {
-        console.log(`  - Alternative parsing SUCCESS: ${startDateTime.format()}`);
-      }
+      console.error(`Invalid datetime for auction ${auction.auction_id}: ${auctionDate} ${auctionTime}`);
+      return false;
     }
-    
-    const endDateTime = startDateTime.clone().add(auction.duration_minutes || 0, 'minutes');
     
     // Check if auction is approved and within time bounds
     const isApproved = auction.status === 'approved' || auction.status === 'live';
     const isWithinTimeRange = nowSL.isBetween(startDateTime, endDateTime, null, '[]');
     
-    console.log(`  - Status: ${auction.status} (approved: ${isApproved})`);
-    console.log(`  - Now SL: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
-    console.log(`  - Start SL: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
-    console.log(`  - End SL: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
-    console.log(`  - Within time: ${isWithinTimeRange}`);
-    console.log(`  - Final result: ${isApproved && isWithinTimeRange}`);
+    console.log(`isAuctionLive check for ${auction.auction_id}:`, {
+      status: auction.status,
+      isApproved,
+      nowSL: nowSL.format('YYYY-MM-DD HH:mm:ss'),
+      startDateTime: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+      endDateTime: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
+      isWithinTimeRange,
+      finalResult: isApproved && isWithinTimeRange
+    });
     
     return isApproved && isWithinTimeRange;
   } catch (error) {
-    console.error('Error in isAuctionLive:', error);
+    console.error('Error checking if auction is live:', error);
     return false;
   }
 };
 
-// FIXED: Updated getAuctionStatus with null safety
-const getAuctionStatus = (auction) => {
+// Get live auctions for bidders (only auctions they are invited to)
+const getLiveAuctionsForBidder = async (req, res) => {
   try {
+    const bidderId = req.user.id;
     const nowSL = getCurrentSLTime();
     
-    // FIXED: Add null/undefined checks
-    if (!auction || !auction.auction_date || !auction.start_time) {
-      console.log(`getAuctionStatus: Missing required auction data`);
-      console.log(`  - auction_date: ${auction?.auction_date}`);
-      console.log(`  - start_time: ${auction?.start_time}`);
-      return 'error';
+    console.log('=== GETTING LIVE AUCTIONS FOR BIDDER ===');
+    console.log('Bidder ID:', bidderId);
+    console.log('Current SL time:', nowSL.format('YYYY-MM-DD HH:mm:ss'));
+
+    // Get ALL auctions the bidder is invited to with approved status
+    const { data: invitedAuctions, error: invitedError } = await query(`
+      SELECT a.*, 
+             u.name as bidder_name,
+             u.user_id as bidder_user_id,
+             ab.invited_at
+      FROM auctions a
+      JOIN auction_bidders ab ON a.id = ab.auction_id
+      JOIN users u ON ab.bidder_id = u.id
+      WHERE ab.bidder_id = ? 
+        AND a.status IN ('approved', 'live')
+      ORDER BY a.auction_date ASC, a.start_time ASC
+    `, [bidderId]);
+
+    if (invitedError) {
+      console.error('Error fetching invited auctions:', invitedError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch invited auctions'
+      });
     }
+
+    console.log(`Found ${invitedAuctions?.length || 0} approved/live invited auctions`);
     
-    // Handle date/time parsing the same way
-    let auctionDate = auction.auction_date;
-    let auctionTime = auction.start_time;
-    
-    if (auctionDate instanceof Date) {
-      auctionDate = moment(auctionDate).format('YYYY-MM-DD');
-    }
-    
-    // Convert to string if not already
-    auctionDate = String(auctionDate);
-    auctionTime = String(auctionTime);
-    
-    if (auctionTime.includes('.')) {
-      auctionTime = auctionTime.split('.')[0];
-    }
-    
-    // Try to parse the datetime
-    let startDateTime;
-    const dateTimeString = `${auctionDate} ${auctionTime}`;
-    startDateTime = moment.tz(dateTimeString, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-    
-    if (!startDateTime.isValid()) {
-      // Fallback parsing
-      const datePart = moment.tz(auctionDate, 'YYYY-MM-DD', 'Asia/Colombo');
-      const timeParts = auctionTime.split(':');
+    if (!invitedAuctions || invitedAuctions.length === 0) {
+      console.log('No approved auctions found for this bidder');
       
-      if (timeParts.length < 2) {
-        console.error(`Invalid time format in getAuctionStatus: ${auctionTime}`);
-        return 'error';
+      // Check if there are pending auctions
+      const { data: pendingAuctions } = await query(`
+        SELECT COUNT(*) as count FROM auctions a
+        JOIN auction_bidders ab ON a.id = ab.auction_id
+        WHERE ab.bidder_id = ? AND a.status = 'pending'
+      `, [bidderId]);
+
+      let message = 'No approved auctions found';
+      if (pendingAuctions && pendingAuctions[0].count > 0) {
+        message = `Found ${pendingAuctions[0].count} pending auction(s) awaiting approval`;
       }
+
+      return res.json({
+        success: true,
+        count: 0,
+        auctions: [],
+        current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
+        message
+      });
+    }
+
+    // Filter for currently live auctions
+    const liveAuctions = [];
+    const futureAuctions = [];
+    const pastAuctions = [];
+    
+    for (const auction of invitedAuctions) {
+      console.log(`\n--- Checking auction ${auction.auction_id} for live status ---`);
       
-      const hours = parseInt(timeParts[0]) || 0;
-      const minutes = parseInt(timeParts[1]) || 0;
-      const seconds = parseInt(timeParts[2]) || 0;
+      const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+      const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
       
-      startDateTime = datePart.clone().hour(hours).minute(minutes).second(seconds);
-    }
-    
-    if (!startDateTime.isValid()) {
-      console.error(`Cannot parse auction datetime: ${dateTimeString}`);
-      return 'error';
-    }
-    
-    const endDateTime = startDateTime.clone().add(auction.duration_minutes || 0, 'minutes');
-    
-    // If auction is rejected or still pending approval
-    if (auction.status === 'rejected' || auction.status === 'pending') {
-      return auction.status;
-    }
-    
-    // Only check time-based status if auction is approved
-    if (auction.status === 'approved') {
-      if (nowSL.isBefore(startDateTime)) {
-        return 'approved'; // Keep as approved until start time
-      } else if (nowSL.isBetween(startDateTime, endDateTime, null, '[]')) {
-        return 'live';
+      console.log(`Auction: ${auction.title}`);
+      console.log(`Status: ${auction.status}`);
+      console.log(`Start: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+      console.log(`End: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+      console.log(`Current: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
+      
+      const isLive = isAuctionLive(auction);
+      
+      if (isLive) {
+        console.log(`✅ Auction ${auction.auction_id} is LIVE`);
+        
+        // Add time remaining and other live info
+        const timeRemaining = endDateTime.diff(nowSL, 'milliseconds');
+        liveAuctions.push({
+          ...auction,
+          calculated_status: 'live',
+          is_live: true,
+          time_remaining_ms: Math.max(0, timeRemaining),
+          start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+          end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
+          time_until_end: moment.duration(timeRemaining).humanize()
+        });
       } else {
-        return 'ended';
+        console.log(`❌ Auction ${auction.auction_id} is NOT live`);
+        
+        // Categorize non-live auctions
+        if (nowSL.isBefore(startDateTime)) {
+          const timeUntilStart = startDateTime.diff(nowSL, 'milliseconds');
+          futureAuctions.push({
+            ...auction,
+            calculated_status: 'approved',
+            is_live: false,
+            time_until_start_ms: timeUntilStart,
+            start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+            time_until_start: moment.duration(timeUntilStart).humanize()
+          });
+        } else if (nowSL.isSameOrAfter(endDateTime)) {
+          pastAuctions.push({
+            ...auction,
+            calculated_status: 'ended',
+            is_live: false,
+            start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+            end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss')
+          });
+        }
       }
     }
-    
-    // For live status, check if it should end
-    if (auction.status === 'live') {
-      if (nowSL.isSameOrAfter(endDateTime)) {
-        return 'ended';
-      } else {
-        return 'live';
-      }
-    }
-    
-    // For legacy auctions without approval workflow
-    if (nowSL.isBefore(startDateTime)) {
-      return 'pending';
-    } else if (nowSL.isBetween(startDateTime, endDateTime, null, '[]')) {
-      return 'live';
+
+    console.log(`\nFinal result: ${liveAuctions.length} live auctions found`);
+    console.log(`Future auctions: ${futureAuctions.length}`);
+    console.log(`Past auctions: ${pastAuctions.length}`);
+
+    // Prepare response message
+    let message = '';
+    if (liveAuctions.length > 0) {
+      message = `${liveAuctions.length} auction(s) are currently live`;
+    } else if (futureAuctions.length > 0) {
+      const nextAuction = futureAuctions[0];
+      message = `No auctions are currently live. Next auction "${nextAuction.title}" starts in ${nextAuction.time_until_start}`;
+    } else if (pastAuctions.length > 0) {
+      message = 'No auctions are currently live. All approved auctions have ended.';
     } else {
-      return 'ended';
+      message = 'No live auctions found.';
     }
+
+    res.json({
+      success: true,
+      count: liveAuctions.length,
+      auctions: liveAuctions,
+      future_auctions: futureAuctions,
+      past_auctions: pastAuctions,
+      current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
+      message,
+      debug: {
+        bidderId,
+        totalInvitedAuctions: invitedAuctions.length,
+        liveAuctionCount: liveAuctions.length,
+        futureAuctionCount: futureAuctions.length,
+        pastAuctionCount: pastAuctions.length
+      }
+    });
+
   } catch (error) {
-    console.error('Error in getAuctionStatus:', error);
-    return 'error';
+    console.error('Error fetching live auctions for bidder:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch live auctions',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
-
-// FIXED: Get live auctions for admin with proper timezone handling
-const getAdminLiveAuctions = async (req, res) => {
+// Get live auctions for admin (all live auctions in the system)
+const getLiveAuctionsForAdmin = async (req, res) => {
   try {
     const nowSL = getCurrentSLTime();
+    console.log('=== GETTING LIVE AUCTIONS FOR ADMIN ===');
     console.log('Admin requesting live auctions at SL time:', nowSL.format('YYYY-MM-DD HH:mm:ss'));
 
-    // FIXED: Get all auctions with timezone conversion
+    // Get all auctions with approved or live status
     const { data: auctions, error } = await query(`
-      SELECT *,
-             CONVERT_TZ(CONCAT(auction_date, ' ', start_time), '+00:00', '+05:30') as start_datetime_sl,
-             CONVERT_TZ(DATE_ADD(CONCAT(auction_date, ' ', start_time), INTERVAL duration_minutes MINUTE), '+00:00', '+05:30') as end_datetime_sl
-      FROM auctions 
-      WHERE status IN ('approved', 'live')
-      ORDER BY auction_date DESC, start_time DESC
+      SELECT a.*,
+             COUNT(ab.bidder_id) as invited_bidder_count,
+             COUNT(DISTINCT b.bidder_id) as active_bidder_count,
+             COUNT(b.id) as total_bids,
+             MIN(b.amount) as lowest_bid,
+             MAX(b.amount) as highest_bid
+      FROM auctions a 
+      LEFT JOIN auction_bidders ab ON a.id = ab.auction_id
+      LEFT JOIN bids b ON a.id = b.auction_id
+      WHERE a.status IN ('approved', 'live')
+      GROUP BY a.id
+      ORDER BY a.auction_date ASC, a.start_time ASC
     `);
 
     if (error) {
@@ -404,37 +253,103 @@ const getAdminLiveAuctions = async (req, res) => {
       });
     }
 
-    console.log(`Found ${auctions?.length || 0} approved/live auctions`);
+    console.log(`Found ${auctions?.length || 0} approved/live auctions in system`);
 
-    // FIXED: Filter for live auctions with proper timezone handling
-    const liveAuctions = auctions.filter(auction => {
-      const liveStatus = isAuctionLive(auction);
-      console.log(`Admin view - Auction ${auction.auction_id} live status: ${liveStatus}`);
-      return liveStatus;
-    });
-
-    console.log(`Found ${liveAuctions.length} currently live auctions for admin`);
-
-    // Add calculated status and time info
-    const enrichedLiveAuctions = liveAuctions.map(auction => {
+    // Filter for currently live auctions
+    const liveAuctions = [];
+    const upcomingAuctions = [];
+    const endedAuctions = [];
+    
+    for (const auction of auctions) {
+      console.log(`\n--- Admin checking auction ${auction.auction_id} ---`);
+      
       const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
       const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
-      const timeRemaining = endDateTime.diff(nowSL, 'milliseconds');
       
-      return {
-        ...auction,
-        calculated_status: 'live',
-        is_live: true,
-        time_remaining_ms: Math.max(0, timeRemaining),
-        start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
-        end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss')
-      };
-    });
+      console.log(`Status: ${auction.status}`);
+      console.log(`Start: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+      console.log(`End: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+      
+      const isLive = isAuctionLive(auction);
+      
+      if (isLive) {
+        console.log(`✅ Admin view - Auction ${auction.auction_id} is LIVE`);
+        
+        const timeRemaining = endDateTime.diff(nowSL, 'milliseconds');
+        liveAuctions.push({
+          ...auction,
+          calculated_status: 'live',
+          is_live: true,
+          time_remaining_ms: Math.max(0, timeRemaining),
+          start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+          end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
+          time_until_end: moment.duration(timeRemaining).humanize(),
+          // Admin specific data
+          invited_bidders: auction.invited_bidder_count || 0,
+          active_bidders: auction.active_bidder_count || 0,
+          total_bids: auction.total_bids || 0,
+          lowest_bid: auction.lowest_bid,
+          highest_bid: auction.highest_bid,
+          participation_rate: auction.invited_bidder_count > 0 
+            ? ((auction.active_bidder_count / auction.invited_bidder_count) * 100).toFixed(2)
+            : 0
+        });
+      } else {
+        console.log(`❌ Admin view - Auction ${auction.auction_id} is NOT live`);
+        
+        // Categorize non-live auctions for admin reference
+        if (nowSL.isBefore(startDateTime)) {
+          const timeUntilStart = startDateTime.diff(nowSL, 'milliseconds');
+          upcomingAuctions.push({
+            ...auction,
+            calculated_status: 'approved',
+            is_live: false,
+            time_until_start_ms: timeUntilStart,
+            start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+            time_until_start: moment.duration(timeUntilStart).humanize(),
+            invited_bidders: auction.invited_bidder_count || 0
+          });
+        } else if (nowSL.isSameOrAfter(endDateTime)) {
+          endedAuctions.push({
+            ...auction,
+            calculated_status: 'ended',
+            is_live: false,
+            start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+            end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
+            invited_bidders: auction.invited_bidder_count || 0,
+            active_bidders: auction.active_bidder_count || 0,
+            total_bids: auction.total_bids || 0,
+            lowest_bid: auction.lowest_bid,
+            highest_bid: auction.highest_bid
+          });
+        }
+      }
+    }
+
+    console.log(`\nAdmin result: ${liveAuctions.length} live auctions found`);
+
+    // Calculate summary statistics
+    const totalInvitedBidders = liveAuctions.reduce((sum, auction) => sum + (auction.invited_bidders || 0), 0);
+    const totalActiveBidders = liveAuctions.reduce((sum, auction) => sum + (auction.active_bidders || 0), 0);
+    const totalBids = liveAuctions.reduce((sum, auction) => sum + (auction.total_bids || 0), 0);
 
     res.json({
       success: true,
-      auctions: enrichedLiveAuctions,
-      count: enrichedLiveAuctions.length,
+      count: liveAuctions.length,
+      auctions: liveAuctions,
+      upcoming_auctions: upcomingAuctions,
+      ended_auctions: endedAuctions,
+      summary: {
+        live_auctions: liveAuctions.length,
+        upcoming_auctions: upcomingAuctions.length,
+        ended_auctions: endedAuctions.length,
+        total_invited_bidders: totalInvitedBidders,
+        total_active_bidders: totalActiveBidders,
+        total_bids: totalBids,
+        overall_participation_rate: totalInvitedBidders > 0 
+          ? ((totalActiveBidders / totalInvitedBidders) * 100).toFixed(2)
+          : 0
+      },
       current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss')
     });
 
@@ -442,7 +357,431 @@ const getAdminLiveAuctions = async (req, res) => {
     console.error('Get admin live auctions error:', error);
     res.status(500).json({
       success: false,
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Get live auction details for specific auction
+const getLiveAuctionDetails = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const nowSL = getCurrentSLTime();
+
+    console.log('Getting live auction details:', { auctionId, userId, userRole });
+
+    // Get auction details with bidder information
+    const { data: auction, error: auctionError } = await query(`
+      SELECT a.*,
+             COUNT(DISTINCT ab.bidder_id) as invited_bidder_count,
+             COUNT(DISTINCT b.bidder_id) as active_bidder_count,
+             COUNT(b.id) as total_bids,
+             MIN(b.amount) as lowest_bid,
+             MAX(b.amount) as highest_bid,
+             AVG(b.amount) as average_bid
+      FROM auctions a 
+      LEFT JOIN auction_bidders ab ON a.id = ab.auction_id
+      LEFT JOIN bids b ON a.id = b.auction_id
+      WHERE (a.id = ? OR a.auction_id = ?)
+      GROUP BY a.id
+    `, [auctionId, auctionId]);
+
+    if (auctionError || !auction || auction.length === 0) {
+      console.error('Auction not found:', auctionError);
+      return res.status(404).json({
+        success: false,
+        error: 'Auction not found'
+      });
+    }
+
+    const auctionData = auction[0];
+
+    // Check if user is authorized to view this auction
+    if (userRole === 'bidder') {
+      // Check if bidder is invited to this auction
+      const { data: invitation } = await query(
+        'SELECT 1 FROM auction_bidders WHERE auction_id = ? AND bidder_id = ?',
+        [auctionData.id, userId]
+      );
+
+      if (!invitation || invitation.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: 'You are not invited to this auction'
+        });
+      }
+    }
+
+    // Check if auction is currently live
+    const isLive = isAuctionLive(auctionData);
+    
+    if (!isLive) {
+      const startDateTime = moment.tz(`${auctionData.auction_date} ${auctionData.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+      const endDateTime = startDateTime.clone().add(auctionData.duration_minutes, 'minutes');
+      
+      let message = 'Auction is not currently live.';
+      if (nowSL.isBefore(startDateTime)) {
+        const timeUntilStart = startDateTime.diff(nowSL, 'milliseconds');
+        message = `Auction starts in ${moment.duration(timeUntilStart).humanize()}`;
+      } else if (nowSL.isSameOrAfter(endDateTime)) {
+        message = 'Auction has ended.';
+      }
+
+      return res.status(400).json({
+        success: false,
+        error: message,
+        auction_status: auctionData.status,
+        is_live: false,
+        start_time: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+        current_time: nowSL.format('YYYY-MM-DD HH:mm:ss')
+      });
+    }
+
+    // Get current rankings (lowest bid wins - reverse auction)
+    const { data: allBids, error: bidsError } = await query(`
+      SELECT b.bidder_id, b.amount, b.bid_time,
+             u.user_id, u.name, u.company
+      FROM bids b
+      JOIN users u ON b.bidder_id = u.id
+      WHERE b.auction_id = ? 
+      ORDER BY b.amount ASC, b.bid_time ASC
+    `, [auctionData.id]);
+
+    let rankings = [];
+    if (!bidsError && allBids && allBids.length > 0) {
+      // Group by bidder and get their lowest bid
+      const bidderLowestBids = {};
+      allBids.forEach(bid => {
+        const bidderId = bid.bidder_id;
+        if (!bidderLowestBids[bidderId] || bid.amount < bidderLowestBids[bidderId].amount) {
+          bidderLowestBids[bidderId] = {
+            bidder_id: bidderId,
+            amount: bid.amount,
+            bid_time: bid.bid_time,
+            user_id: bid.user_id,
+            name: bid.name,
+            company: bid.company
+          };
+        }
+      });
+
+      // Create sorted rankings array
+      rankings = Object.values(bidderLowestBids)
+        .sort((a, b) => {
+          if (a.amount !== b.amount) {
+            return a.amount - b.amount; // Lowest first
+          }
+          return new Date(a.bid_time) - new Date(b.bid_time); // Earliest first if tie
+        })
+        .map((bidder, index) => ({
+          rank: index + 1,
+          bidder_id: bidder.bidder_id,
+          user_id: bidder.user_id,
+          name: bidder.name,
+          company: bidder.company,
+          amount: bidder.amount,
+          bid_time: bidder.bid_time,
+          is_leader: index === 0
+        }));
+    }
+
+    // Get invited bidders list
+    const { data: invitedBidders } = await query(`
+      SELECT u.id as bidder_id, u.user_id, u.name, u.company,
+             ab.invited_at,
+             CASE WHEN b.bidder_id IS NOT NULL THEN TRUE ELSE FALSE END as has_bid
+      FROM auction_bidders ab
+      JOIN users u ON ab.bidder_id = u.id
+      LEFT JOIN (SELECT DISTINCT bidder_id FROM bids WHERE auction_id = ?) b ON u.id = b.bidder_id
+      WHERE ab.auction_id = ?
+      ORDER BY u.name
+    `, [auctionData.id, auctionData.id]);
+
+    // Calculate time remaining
+    const startDateTime = moment.tz(`${auctionData.auction_date} ${auctionData.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    const endDateTime = startDateTime.clone().add(auctionData.duration_minutes, 'minutes');
+    const timeRemaining = endDateTime.diff(nowSL, 'milliseconds');
+
+    // Prepare response data
+    const liveAuctionData = {
+      // Basic auction info
+      id: auctionData.id,
+      auction_id: auctionData.auction_id,
+      title: auctionData.title,
+      category: auctionData.category,
+      sbu: auctionData.sbu,
+      status: 'live',
+      is_live: true,
+      
+      // Timing information
+      start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+      end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
+      duration_minutes: auctionData.duration_minutes,
+      time_remaining_ms: Math.max(0, timeRemaining),
+      time_until_end: moment.duration(timeRemaining).humanize(),
+      
+      // Bidding statistics
+      invited_bidders_count: auctionData.invited_bidder_count || 0,
+      active_bidders_count: auctionData.active_bidder_count || 0,
+      total_bids: auctionData.total_bids || 0,
+      lowest_bid: auctionData.lowest_bid,
+      highest_bid: auctionData.highest_bid,
+      average_bid: auctionData.average_bid ? parseFloat(auctionData.average_bid).toFixed(2) : null,
+      
+      // Participation data
+      participation_rate: auctionData.invited_bidder_count > 0 
+        ? ((auctionData.active_bidder_count / auctionData.invited_bidder_count) * 100).toFixed(2)
+        : 0,
+      
+      // Current rankings
+      rankings: rankings || [],
+      current_leader: rankings.length > 0 ? rankings[0] : null,
+      
+      // Special notices
+      special_notices: auctionData.special_notices,
+      
+      // Admin-only data
+      ...(userRole === 'admin' || userRole === 'system_admin' ? {
+        invited_bidders: invitedBidders || [],
+        created_by: auctionData.created_by,
+        created_at: auctionData.created_at
+      } : {}),
+      
+      // Bidder-specific data
+      ...(userRole === 'bidder' ? {
+        user_rank: rankings.find(r => r.bidder_id === userId)?.rank || null,
+        user_best_bid: rankings.find(r => r.bidder_id === userId)?.amount || null,
+        is_user_leading: rankings.length > 0 && rankings[0].bidder_id === userId
+      } : {})
+    };
+
+    res.json({
+      success: true,
+      auction: liveAuctionData,
+      current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
+      message: `Live auction data retrieved successfully. ${timeRemaining > 0 ? `Time remaining: ${moment.duration(timeRemaining).humanize()}` : 'Auction ending soon!'}`
+    });
+
+  } catch (error) {
+    console.error('Get live auction details error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Get live auction rankings
+const getLiveAuctionRankings = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    console.log('Getting live auction rankings:', { auctionId, userId, userRole });
+
+    // Verify auction exists and is live
+    const { data: auction } = await query(
+      'SELECT * FROM auctions WHERE (id = ? OR auction_id = ?) AND status IN (?, ?)',
+      [auctionId, auctionId, 'approved', 'live']
+    );
+
+    if (!auction || auction.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Live auction not found'
+      });
+    }
+
+    const auctionData = auction[0];
+
+    // Check if auction is actually live
+    if (!isAuctionLive(auctionData)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Auction is not currently live'
+      });
+    }
+
+    // For bidders, verify they are invited
+    if (userRole === 'bidder') {
+      const { data: invitation } = await query(
+        'SELECT 1 FROM auction_bidders WHERE auction_id = ? AND bidder_id = ?',
+        [auctionData.id, userId]
+      );
+
+      if (!invitation || invitation.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: 'You are not invited to this auction'
+        });
+      }
+    }
+
+    // Get all bids with bidder information
+    const { data: allBids, error } = await query(`
+      SELECT b.bidder_id, b.amount, b.bid_time,
+             u.user_id, u.name, u.company
+      FROM bids b
+      JOIN users u ON b.bidder_id = u.id
+      WHERE b.auction_id = ?
+      ORDER BY b.bid_time DESC
+    `, [auctionData.id]);
+
+    if (error) {
+      console.error('Get rankings error:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch rankings'
+      });
+    }
+
+    if (!allBids || allBids.length === 0) {
+      return res.json({
+        success: true,
+        rankings: [],
+        total_bidders: 0,
+        current_leader: null,
+        user_rank: null,
+        user_best_bid: null,
+        is_user_leading: false,
+        message: 'No bids placed yet'
+      });
+    }
+
+    // Group by bidder and get their lowest bid (reverse auction)
+    const bidderLowestBids = {};
+    allBids.forEach(bid => {
+      const bidderId = bid.bidder_id;
+      if (!bidderLowestBids[bidderId] || bid.amount < bidderLowestBids[bidderId].amount) {
+        bidderLowestBids[bidderId] = {
+          bidder_id: bidderId,
+          amount: bid.amount,
+          bid_time: bid.bid_time,
+          user_id: bid.user_id,
+          name: bid.name,
+          company: bid.company
+        };
+      }
+    });
+
+    // Create sorted rankings array
+    const rankings = Object.values(bidderLowestBids)
+      .sort((a, b) => {
+        if (a.amount !== b.amount) {
+          return a.amount - b.amount; // Lowest first
+        }
+        return new Date(a.bid_time) - new Date(b.bid_time); // Earliest first if tie
+      })
+      .map((bidder, index) => ({
+        rank: index + 1,
+        bidder_id: bidder.bidder_id,
+        user_id: bidder.user_id,
+        name: bidder.name,
+        company: bidder.company,
+        amount: bidder.amount,
+        bid_time: bidder.bid_time,
+        is_leader: index === 0
+      }));
+
+    // Find current user's data (if bidder)
+    const userRanking = rankings.find(r => r.bidder_id === userId);
+
+    res.json({
+      success: true,
+      rankings: rankings || [],
+      total_bidders: rankings.length,
+      current_leader: rankings.length > 0 ? rankings[0] : null,
+      lowest_bid: rankings.length > 0 ? rankings[0].amount : null,
+      // Bidder-specific data
+      ...(userRole === 'bidder' ? {
+        user_rank: userRanking?.rank || null,
+        user_best_bid: userRanking?.amount || null,
+        is_user_leading: userRanking?.rank === 1 || false
+      } : {}),
+      current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
+    });
+
+  } catch (error) {
+    console.error('Get live rankings error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Check auction live status
+const checkAuctionLiveStatus = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+    const nowSL = getCurrentSLTime();
+
+    // Get auction
+    const { data: auction, error } = await query(
+      'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
+      [auctionId, auctionId]
+    );
+
+    if (error || !auction || auction.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Auction not found'
+      });
+    }
+
+    const auctionData = auction[0];
+    const isLive = isAuctionLive(auctionData);
+    
+    const startDateTime = moment.tz(`${auctionData.auction_date} ${auctionData.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    const endDateTime = startDateTime.clone().add(auctionData.duration_minutes, 'minutes');
+    
+    let timeInfo = {};
+    if (isLive) {
+      const timeRemaining = endDateTime.diff(nowSL, 'milliseconds');
+      timeInfo = {
+        time_remaining_ms: Math.max(0, timeRemaining),
+        time_until_end: moment.duration(timeRemaining).humanize()
+      };
+    } else if (nowSL.isBefore(startDateTime)) {
+      const timeUntilStart = startDateTime.diff(nowSL, 'milliseconds');
+      timeInfo = {
+        time_until_start_ms: timeUntilStart,
+        time_until_start: moment.duration(timeUntilStart).humanize()
+      };
+    }
+
+    res.json({
+      success: true,
+      auction_id: auctionData.auction_id,
+      is_live: isLive,
+      status: auctionData.status,
+      start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+      end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
+      current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
+      ...timeInfo
+    });
+
+  } catch (error) {
+    console.error('Check auction live status error:', error);
+    res.status(500).json({
+      success: false,
       error: 'Internal server error'
     });
   }
+};
+
+module.exports = {
+  getLiveAuctionsForBidder,
+  getLiveAuctionsForAdmin,
+  getLiveAuctionDetails,
+  getLiveAuctionRankings,
+  checkAuctionLiveStatus,
+  isAuctionLive,
+  getCurrentSLTime
 };

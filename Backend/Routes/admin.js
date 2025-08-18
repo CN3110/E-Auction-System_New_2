@@ -2,12 +2,18 @@ const express = require('express');
 const router = express.Router();
 const { registerBidder, getBidders, updateBidderStatus, getActiveBidders, testDbConnection, deactivateBidder, reactivateBidder} = require('../Controllers/adminController');
 const { 
-  getAdminLiveAuctions,
-  getAdminAuctionRankings,
-  getAuctionResults
-} = require('../Controllers/auctionController');
+  getLiveAuctionsForAdmin,
+  
+} = require('../Controllers/liveAuction');
 const auth = require('../Middleware/auth');
-
+// Import middleware
+const { 
+  authenticateToken, 
+  requireAdmin, 
+  requireBidder, 
+  requireSystemAdmin,
+  requireAdminOrSystemAdmin 
+} = require('../Middleware/auth');
 
 // Bidder management routes
 router.post('/bidders', registerBidder);
@@ -21,13 +27,14 @@ router.patch('/bidders/:bidderId/reactivate', reactivateBidder);
 
 
 // Get live auctions for admin dashboard
-router.get('/auctions/live', getAdminLiveAuctions);
+router.get('/live/admin', authenticateToken, requireAdminOrSystemAdmin, getLiveAuctionsForAdmin);
+
 
 // Get live rankings for specific auction
-router.get('/auctions/:auctionId/rankings', getAdminAuctionRankings);
+//router.get('/auctions/:auctionId/rankings', getAdminAuctionRankings);
 
 // Get overall auction results
-router.get('/auctions/results', getAuctionResults); 
+//router.get('/auctions/results', getAuctionResults); 
 
 
 router.get('/test-db', testDbConnection);

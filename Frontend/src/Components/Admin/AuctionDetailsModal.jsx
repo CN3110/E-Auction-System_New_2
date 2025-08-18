@@ -167,28 +167,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
     }
   };
 
-  /**
-   * Format date and time for display
-   */
-  const formatDateTime = (dateTimeString) => {
-    if (!dateTimeString) return "Not available";
-
-    try {
-      // Handle both combined date_time and separate date/time
-      const dateTime = new Date(dateTimeString);
-      return dateTime.toLocaleString("en-GB", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      });
-    } catch (e) {
-      console.error("Date formatting error:", e);
-      return dateTimeString; // Return the original string if parsing fails
-    }
-  };
 
   /**
    * Get status badge class for styling
@@ -314,7 +292,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
             </div>
           )}
 
-          {/* Approval Status Banner */}
+          {/* Approval Status Banner 
           {(displayAuction.approved_by || displayAuction.rejected_by) && (
             <div className={`approval-banner ${currentStatus === 'approved' ? 'approved' : 'rejected'}`}>
               {currentStatus === 'approved' ? (
@@ -340,9 +318,9 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                     )}
                   </div>
                 </div>
-              ) : null}
+              ) : null} 
             </div>
-          )}
+          )} */}
 
           {/* Tab Navigation */}
           <div className="tab-navigation">
@@ -403,7 +381,16 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
 
                   <div className="detail-item">
                     <label>Date & Time:</label>
-                    <span>{formatDateTime(displayAuction.date_time || displayAuction.DateTime)}</span>
+                    <span>    {/* Format Auction Date */}
+    
+      {auction.auction_date
+        ? new Date(auction.auction_date).toLocaleDateString("en-US", {
+           year: "numeric",
+            month: "short", // e.g. Aug
+            day: "numeric",
+          })
+        : ""}
+    </span>
                   </div>
 
                   <div className="detail-item">
