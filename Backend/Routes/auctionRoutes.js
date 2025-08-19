@@ -25,6 +25,14 @@ const {
   getActivelyParticipatingBidders  // NEW
 } = require('../Controllers/liveAuction');
 
+// Import results controllers
+const { 
+  awardBidder, 
+  disqualifyBidder,  
+  getAllAuctionBids, 
+  getTopBidders
+} = require('../Controllers/results');
+
 // Import middleware
 const { 
   authenticateToken, 
@@ -82,5 +90,29 @@ router.get('/:auctionId/statistics', authenticateToken, requireAdminOrSystemAdmi
 
 // Get actively participating bidders for an auction (Admin only)
 router.get('/:auctionId/active-bidders', authenticateToken, requireAdminOrSystemAdmin, getActivelyParticipatingBidders);
+
+
+// ===== Award/Disqualify Endpoints ====
+
+// Award bidder
+router.post('/auction/:auctionId/award/:bidderId',authenticateToken, requireSystemAdmin, awardBidder);
+
+// Disqualify bidder  
+router.post('/auction/:auctionId/disqualify/:bidderId', authenticateToken, requireSystemAdmin, disqualifyBidder);
+
+// Get auction results
+router.get('/auction/:auctionId/results', authenticateToken, getAuctionResults);
+
+// Get all records for an auction
+router.get('/auction/:auctionId/all-bids', authenticateToken, getAllAuctionBids);
+
+
+// ===== Quotation Management Endpoints =====
+
+// Upload quotation (bidders only)
+router.post('/auction/:auctionId/quotation', authenticateToken, upload.single('quotation'), uploadQuotation);
+
+// Download quotation (admin only)
+router.get('/auction/:auctionId/quotation/:bidderId', authenticateToken, downloadQuotation);
 
 module.exports = router;

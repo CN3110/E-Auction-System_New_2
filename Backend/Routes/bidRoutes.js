@@ -8,7 +8,7 @@ const {
   getAuctionBids,
   getBidderHistory
 } = require('../Controllers/bidController');
-const { authenticate, authorizeRoles } = require('../Middleware/auth');
+const { authenticate, authorizeRoles, authenticateToken, requireAdminOrSystemAdmin} = require('../Middleware/auth');
 
 // Place a new bid (bidders only) - FIXED: Added proper auth
 router.post('/', authenticate, authorizeRoles('bidder'), placeBid);
@@ -23,7 +23,7 @@ router.get('/rank', authenticate, authorizeRoles('bidder'), getBidderRank);
 //router.get('/min-amount', authenticate, authorizeRoles('bidder'), getMinBidAmount);
 
 // Get all bids for an auction (admin only) - FIXED: Added proper auth
-router.get('/auction/:auctionId', authenticate, authorizeRoles('admin'), getAuctionBids);
+router.get('/auction/:auctionId', authenticateToken, requireAdminOrSystemAdmin, getAuctionBids);
 
 // Get bidder's auction history - FIXED: Added auth
 router.get('/history', authenticate, authorizeRoles('bidder'), getBidderHistory);
