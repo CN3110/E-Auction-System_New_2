@@ -6,20 +6,71 @@ const getCurrentSLTime = () => {
   return moment().tz('Asia/Colombo');
 };
 
-// Helper function to check if auction is live (consistent with auction controller)
+// Helper function to check if auction is live (FIXED - consistent with liveAuction.js)
 const isAuctionLive = (auction) => {
-  const nowSL = getCurrentSLTime();
-  const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
-  const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
-  
-  return nowSL.isBetween(startDateTime, endDateTime, null, '[]'); // inclusive of start and end
+  try {
+    if (!auction || !auction.auction_date || !auction.start_time) {
+      return false;
+    }
+
+    const nowSL = getCurrentSLTime();
+    
+    // Handle different date formats (same logic as liveAuction.js)
+    let auctionDate = auction.auction_date;
+    let auctionTime = auction.start_time;
+    
+    if (auctionDate instanceof Date) {
+      auctionDate = moment(auctionDate).format('YYYY-MM-DD');
+    } else if (typeof auctionDate === 'string') {
+      // If it's an ISO string, parse it first
+      auctionDate = moment(auctionDate).format('YYYY-MM-DD');
+    }
+    
+    // Convert to string and clean time format
+    auctionDate = String(auctionDate);
+    auctionTime = String(auctionTime);
+    
+    if (auctionTime.includes('.')) {
+      auctionTime = auctionTime.split('.')[0];
+    }
+    
+    // Create start and end datetime
+    const startDateTime = moment.tz(`${auctionDate} ${auctionTime}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+    const endDateTime = startDateTime.clone().add(auction.duration_minutes || 0, 'minutes');
+    
+    if (!startDateTime.isValid()) {
+      console.error(`Invalid datetime for auction ${auction.auction_id}: ${auctionDate} ${auctionTime}`);
+      return false;
+    }
+    
+    // Check if auction is approved/live and within time bounds
+    const isApproved = auction.status === 'approved' || auction.status === 'live';
+    const isWithinTimeRange = nowSL.isBetween(startDateTime, endDateTime, null, '[]');
+    
+    console.log(`isAuctionLive check for ${auction.auction_id || auction.id}:`, {
+      status: auction.status,
+      isApproved,
+      nowSL: nowSL.format('YYYY-MM-DD HH:mm:ss'),
+      startDateTime: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+      endDateTime: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
+      isWithinTimeRange,
+      finalResult: isApproved && isWithinTimeRange
+    });
+    
+    return isApproved && isWithinTimeRange;
+  } catch (error) {
+    console.error('Error checking if auction is live:', error);
+    return false;
+  }
 };
 
-// Place a bid - FIXED TIMEZONE
+// Place a bid - FIXED TIMEZONE AND VALIDATION
 const placeBid = async (req, res) => {
     try {
         const { amount, auction_id } = req.body;
         const bidder_id = req.user.id;
+
+        console.log('Place bid request:', { amount, auction_id, bidder_id });
 
         // Validate input
         if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
@@ -43,6 +94,7 @@ const placeBid = async (req, res) => {
         );
 
         if (auctionError || !auctions || auctions.length === 0) {
+            console.error('Auction not found:', auctionError);
             return res.status(404).json({ 
                 success: false,
                 error: 'Auction not found' 
@@ -50,11 +102,33 @@ const placeBid = async (req, res) => {
         }
 
         const auction = auctions[0];
+        console.log('Found auction:', {
+            id: auction.id,
+            auction_id: auction.auction_id,
+            status: auction.status,
+            auction_date: auction.auction_date,
+            start_time: auction.start_time,
+            duration_minutes: auction.duration_minutes
+        });
 
-        // Check if auction is live using Sri Lanka time
+        // Check if auction is live using FIXED logic
         if (!isAuctionLive(auction)) {
             const nowSL = getCurrentSLTime();
-            const startDateTime = moment.tz(`${auction.auction_date} ${auction.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
+            
+            // Parse auction datetime properly
+            let auctionDate = auction.auction_date;
+            if (auctionDate instanceof Date) {
+                auctionDate = moment(auctionDate).format('YYYY-MM-DD');
+            } else if (typeof auctionDate === 'string') {
+                auctionDate = moment(auctionDate).format('YYYY-MM-DD');
+            }
+            
+            let auctionTime = String(auction.start_time);
+            if (auctionTime.includes('.')) {
+                auctionTime = auctionTime.split('.')[0];
+            }
+            
+            const startDateTime = moment.tz(`${auctionDate} ${auctionTime}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
             const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
             
             let message = 'Auction is not currently live';
@@ -62,14 +136,25 @@ const placeBid = async (req, res) => {
                 message = `Auction hasn't started yet. It will begin at ${startDateTime.format('MMMM DD, YYYY hh:mm A')} (Sri Lanka Time)`;
             } else if (nowSL.isAfter(endDateTime)) {
                 message = `Auction has ended. It ended at ${endDateTime.format('MMMM DD, YYYY hh:mm A')} (Sri Lanka Time)`;
+            } else if (auction.status !== 'approved' && auction.status !== 'live') {
+                message = `Auction status is "${auction.status}". Only approved auctions can accept bids.`;
             }
+            
+            console.log('Auction not live:', {
+                message,
+                current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
+                auction_start: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
+                auction_end: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
+                auction_status: auction.status
+            });
             
             return res.status(400).json({ 
                 success: false,
                 error: message,
                 current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
                 auction_start: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
-                auction_end: endDateTime.format('YYYY-MM-DD HH:mm:ss')
+                auction_end: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
+                auction_status: auction.status
             });
         }
 
@@ -117,6 +202,13 @@ const placeBid = async (req, res) => {
             'SELECT amount FROM bids WHERE auction_id = ? ORDER BY amount ASC LIMIT 1',
             [auction_id]
         );
+
+        console.log('Bid placed successfully:', {
+            bid_id: newBid.id,
+            amount: newBid.amount,
+            rank: rank,
+            current_lowest: lowestBids?.[0]?.amount
+        });
 
         res.status(201).json({
             success: true,

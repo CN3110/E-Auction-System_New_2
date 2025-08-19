@@ -340,7 +340,7 @@ const LiveRankings = () => {
                   <div className="row mb-3">
                     <div className="col-md-3">
                       <div className="text-center p-2 bg-light rounded">
-                        <div className="h6 mb-0">{selectedAuction.invited_bidders || selectedAuction.invited_bidder_count || 0}</div>
+                        <div className="h6 mb-0">{selectedAuction.invited_bidders || 0}</div>
                         <small className="text-muted">Invited</small>
                       </div>
                     </div>
