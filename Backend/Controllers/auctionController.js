@@ -691,8 +691,16 @@ const approveAuction = async (req, res) => {
         
         if (!biddersError && bidders && bidders.length > 0) {
           // Format date/time for email in Sri Lanka timezone
-          const formattedDateTime = moment.tz(`${auctionData.auction_date} ${auctionData.start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo')
-            .format('MMMM DD, YYYY at hh:mm A');
+          // Build full datetime string safely
+const rawDateTime = `${auctionData.auction_date} ${auctionData.start_time}`;
+
+// Try both formats depending on DB output
+const formattedDateTime = moment.tz(
+  rawDateTime, 
+  ['YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DD HH:mm'],  // allow both
+  'Asia/Colombo'
+).format('MMMM DD, YYYY [at] hh:mm A');
+
           
           const emailPromises = bidders.map(async (bidder) => {
             const emailHTML = `

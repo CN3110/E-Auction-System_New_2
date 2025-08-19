@@ -125,22 +125,44 @@ const getLiveAuctionsForBidder = async (req, res) => {
     const pastAuctions = [];
     
     for (const auction of invitedAuctions) {
-      //console.log(`\n--- Checking auction ${auction.auction_id} for live status ---`);
+      console.log(`\n--- Checking auction ${auction.auction_id} for live status ---`);
       
-      // Make sure the date and time values are properly formatted strings
-const startDateTime = moment.tz(
-  `${auction.auction_date} ${auction.start_time}`, 
-  'YYYY-MM-DD HH:mm:ss', 
-  'Asia/Colombo'
-);
+      // FIX: Handle the date properly - convert ISO date to YYYY-MM-DD format
+      let auctionDateStr;
+      if (auction.auction_date instanceof Date) {
+        // If it's a Date object
+        auctionDateStr = moment(auction.auction_date).format('YYYY-MM-DD');
+      } else if (typeof auction.auction_date === 'string') {
+        // If it's an ISO string, parse it first
+        auctionDateStr = moment(auction.auction_date).format('YYYY-MM-DD');
+      } else {
+        console.error('Unexpected auction_date format:', auction.auction_date);
+        continue; // Skip this auction
+      }
 
-const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+      console.log(`Parsed auction date: ${auctionDateStr}`);
+      console.log(`Start time: ${auction.start_time}`);
+
+      // Create the start datetime in Sri Lanka timezone
+      const startDateTime = moment.tz(
+        `${auctionDateStr} ${auction.start_time}`, 
+        'YYYY-MM-DD HH:mm:ss', 
+        'Asia/Colombo'
+      );
+
+      const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
       
-      //console.log(`Auction: ${auction.title}`);
-      //console.log(`Status: ${auction.status}`);
-      //console.log(`Start: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
-      //console.log(`End: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
-      //console.log(`Current: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
+      console.log(`Auction: ${auction.title}`);
+      console.log(`Status: ${auction.status}`);
+      console.log(`Start: ${startDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+      console.log(`End: ${endDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+      console.log(`Current: ${nowSL.format('YYYY-MM-DD HH:mm:ss')}`);
+      
+      // Check if the datetime parsing was successful
+      if (!startDateTime.isValid()) {
+        console.error(`Invalid start datetime for auction ${auction.auction_id}`);
+        continue; // Skip this auction
+      }
       
       const isLive = isAuctionLive(auction);
       
@@ -156,10 +178,10 @@ const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes
           time_remaining_ms: Math.max(0, timeRemaining),
           start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
           end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
-          time_until_end: moment.duration(timeRemaining).humanize()
+          time_until_end: moment.duration(Math.max(0, timeRemaining)).humanize()
         });
       } else {
-        //console.log(`❌ Auction ${auction.auction_id} is NOT live`);
+        console.log(`❌ Auction ${auction.auction_id} is NOT live`);
         
         // Categorize non-live auctions
         if (nowSL.isBefore(startDateTime)) {
@@ -184,9 +206,9 @@ const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes
       }
     }
 
-    //console.log(`\nFinal result: ${liveAuctions.length} live auctions found`);
-    //console.log(`Future auctions: ${futureAuctions.length}`);
-    //console.log(`Past auctions: ${pastAuctions.length}`);
+    console.log(`\nFinal result: ${liveAuctions.length} live auctions found`);
+    console.log(`Future auctions: ${futureAuctions.length}`);
+    console.log(`Past auctions: ${pastAuctions.length}`);
 
     // Prepare response message
     let message = '';
