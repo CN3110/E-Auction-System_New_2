@@ -1,0 +1,529 @@
+/* BidRecordsModal.css */
+
+.bid-records-modal {
+  width: 95%;
+  max-width: 1400px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header Styles */
+.bid-records-modal .modal-header .header-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bid-records-modal .auction-info {
+  display: flex;
+  gap: 15px;
+  font-size: 14px;
+  color: #666;
+}
+
+.bid-records-modal .auction-id {
+  font-weight: bold;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.bid-records-modal .auction-title {
+  font-style: italic;
+}
+
+/* Filters Section */
+.filters-section {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.filters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.filters-header h3 {
+  margin: 0;
+  color: #334155;
+  font-size: 16px;
+}
+
+.btn-clear {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn-clear:hover {
+  background: #e2e8f0;
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.filter-group label {
+  font-weight: 500;
+  color: #374151;
+  font-size: 13px;
+}
+
+.filter-group select,
+.filter-group input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+}
+
+.filter-group select:focus,
+.filter-group input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Records Summary */
+.records-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f9fafb;
+  padding: 15px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  border: 1px solid #e5e7eb;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 30px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.stat-item label {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.stat-value {
+  color: #111827;
+  font-weight: bold;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-refresh,
+.btn-export {
+  padding: 8px 16px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-refresh {
+  background: #10b981;
+  color: white;
+  border: none;
+}
+
+.btn-refresh:hover {
+  background: #059669;
+}
+
+.btn-export {
+  background: #f59e0b;
+  color: white;
+  border: none;
+}
+
+.btn-export:hover {
+  background: #d97706;
+}
+
+/* Table Styles */
+.table-container {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  background: white;
+}
+
+.bid-records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.bid-records-table th {
+  background: #f8fafc;
+  color: #374151;
+  font-weight: 600;
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 2px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.bid-records-table th:hover {
+  background: #f1f5f9;
+}
+
+.bid-records-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+
+.bid-records-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.winning-bid {
+  background: #fef3c7 !important;
+}
+
+.winning-bid:hover {
+  background: #fde68a !important;
+}
+
+/* Column Specific Styles */
+.bid-time {
+  font-family: monospace;
+  color: #6b7280;
+  min-width: 140px;
+}
+
+.bidder-name {
+  font-weight: 500;
+  color: #111827;
+}
+
+.company-name {
+  color: #6b7280;
+}
+
+.bid-amount {
+  font-weight: 600;
+  text-align: right;
+  min-width: 120px;
+}
+
+.winning-amount {
+  color: #059669;
+  font-weight: bold;
+}
+
+.regular-amount {
+  color: #374151;
+}
+
+.winning-status,
+.result-status {
+  text-align: center;
+}
+
+.actions {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+/* Status Badges */
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-winning {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-regular {
+  background: #f3f4f6;
+  color: #9ca3af;
+}
+
+.status-awarded {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-not-awarded {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-disqualified {
+  background: #fecaca;
+  color: #b91c1c;
+}
+
+/* Small Buttons */
+.btn-small {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  min-width: 30px;
+}
+
+.btn-info {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.btn-info:hover {
+  background: #bfdbfe;
+}
+
+.btn-warning {
+  background: #fed7aa;
+  color: #c2410c;
+}
+
+.btn-warning:hover {
+  background: #fdba74;
+}
+
+/* No Records State */
+.no-records {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #6b7280;
+}
+
+.no-records-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+  opacity: 0.5;
+}
+
+.no-records h4 {
+  margin: 0 0 10px 0;
+  color: #374151;
+  font-size: 18px;
+}
+
+.no-records p {
+  margin: 0;
+  text-align: center;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 20px;
+}
+
+.btn-pagination {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  background: white;
+  color: #374151;
+  border-radius: 6px;
+  font-size: 14px;
+  min-width: 44px;
+}
+
+.btn-pagination:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.btn-pagination:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-pagination.active {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.page-numbers {
+  display: flex;
+  gap: 2px;
+  margin: 0 10px;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .bid-records-modal {
+    width: 98%;
+  }
+  
+  .filters-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .bid-records-modal {
+    width: 100%;
+    height: 100vh;
+    max-height: none;
+    border-radius: 0;
+  }
+  
+  .filters-section {
+    padding: 15px;
+  }
+  
+  .filters-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  
+  .records-summary {
+    flex-direction: column;
+    gap: 15px;
+    align-items: stretch;
+  }
+  
+  .summary-stats {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .action-buttons {
+    justify-content: center;
+  }
+  
+  .bid-records-table {
+    font-size: 12px;
+  }
+  
+  .bid-records-table th,
+  .bid-records-table td {
+    padding: 8px 6px;
+  }
+  
+  /* Hide less important columns on mobile */
+  .company-name,
+  .result-status {
+    display: none;
+  }
+  
+  .pagination {
+    flex-wrap: wrap;
+    gap: 3px;
+  }
+  
+  .btn-pagination {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-width: 36px;
+  }
+}
+
+@media (max-width: 480px) {
+  .filters-header {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+  }
+  
+  .stat-item {
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+  }
+  
+  /* Show only essential columns on very small screens */
+  .winning-status,
+  .actions {
+    display: none;
+  }
+}
+
+/* Loading and Error States */
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f4f6;
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error-content {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.btn-retry {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  margin-top: 15px;
+}
+
+.btn-retry:hover {
+  background: #2563eb;
+}

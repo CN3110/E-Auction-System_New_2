@@ -101,18 +101,18 @@ router.post('/auction/:auctionId/award/:bidderId',authenticateToken, requireSyst
 router.post('/auction/:auctionId/disqualify/:bidderId', authenticateToken, requireSystemAdmin, disqualifyBidder);
 
 // Get auction results
-router.get('/auction/:auctionId/results', authenticateToken, getAuctionResults);
+//router.get('/auction/:auctionId/results', authenticateToken, getAuctionResults);
 
 // Get all records for an auction
-router.get('/auction/:auctionId/all-bids', authenticateToken, getAllAuctionBids);
+router.get('/:auctionId/all-bids', authenticateToken, getAllAuctionBids);
 
 
 // ===== Quotation Management Endpoints =====
 
 // Upload quotation (bidders only)
-router.post('/auction/:auctionId/quotation', authenticateToken, upload.single('quotation'), uploadQuotation);
+//router.post('/auction/:auctionId/quotation', authenticateToken, upload.single('quotation'), uploadQuotation);
 
 // Download quotation (admin only)
-router.get('/auction/:auctionId/quotation/:bidderId', authenticateToken, downloadQuotation);
+//router.get('/auction/:auctionId/quotation/:bidderId', authenticateToken, downloadQuotation);
 
 module.exports = router;

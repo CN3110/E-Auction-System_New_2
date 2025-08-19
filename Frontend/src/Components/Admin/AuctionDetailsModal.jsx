@@ -5,6 +5,7 @@ import {
   approveAuction,
   rejectAuction,
 } from "../../services/auctionService";
+import BidRecordsModal from "./BidRecordsModal"; // Import the new modal
 import "../../styles/AuctionDetailsModal.css";
 
 const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
@@ -17,6 +18,9 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
   const [actionLoading, setActionLoading] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
+  
+  // New state for bid records modal
+  const [showBidRecordsModal, setShowBidRecordsModal] = useState(false);
 
   // Fetch detailed auction information on component mount
   useEffect(() => {
@@ -167,7 +171,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
     }
   };
 
-
   /**
    * Get status badge class for styling
    */
@@ -209,6 +212,20 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
     if (e.target === e.currentTarget) {
       onClose();
     }
+  };
+
+  /**
+   * Handle opening bid records modal
+   */
+  const handleViewBidRecords = () => {
+    setShowBidRecordsModal(true);
+  };
+
+  /**
+   * Handle closing bid records modal
+   */
+  const handleCloseBidRecords = () => {
+    setShowBidRecordsModal(false);
   };
 
   if (loading) {
@@ -292,36 +309,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
             </div>
           )}
 
-          {/* Approval Status Banner 
-          {(displayAuction.approved_by || displayAuction.rejected_by) && (
-            <div className={`approval-banner ${currentStatus === 'approved' ? 'approved' : 'rejected'}`}>
-              {currentStatus === 'approved' ? (
-                <div className="approval-info">
-                  <span className="approval-icon">✅</span>
-                  <div>
-                    <strong>Approved by:</strong> {displayAuction.approved_by}
-                    <br />
-                    <small>on {formatDateTime(displayAuction.approved_at)}</small>
-                  </div>
-                </div>
-              ) : currentStatus === 'rejected' ? (
-                <div className="approval-info">
-                  <span className="approval-icon">❌</span>
-                  <div>
-                    <strong>Rejected by:</strong> {displayAuction.rejected_by}
-                    <br />
-                    <small>on {formatDateTime(displayAuction.rejected_at)}</small>
-                    {displayAuction.rejection_reason && (
-                      <div className="rejection-reason">
-                        <strong>Reason:</strong> {displayAuction.rejection_reason}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null} 
-            </div>
-          )} */}
-
           {/* Tab Navigation */}
           <div className="tab-navigation">
             <button
@@ -381,16 +368,15 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
 
                   <div className="detail-item">
                     <label>Date & Time:</label>
-                    <span>    {/* Format Auction Date */}
-    
-      {auction.auction_date
-        ? new Date(auction.auction_date).toLocaleDateString("en-US", {
-           year: "numeric",
-            month: "short", // e.g. Aug
-            day: "numeric",
-          })
-        : ""}
-    </span>
+                    <span>
+                      {auction.auction_date
+                        ? new Date(auction.auction_date).toLocaleDateString("en-US", {
+                           year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : ""}
+                    </span>
                   </div>
 
                   <div className="detail-item">
@@ -429,6 +415,16 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                     </div>
                   )}
                 </div>
+
+                {/* Add Bid Records Button in Details Tab */}
+                <div className="details-actions">
+                  <button
+                    className="btn btn-bid-records"
+                    onClick={handleViewBidRecords}
+                  >
+                    📋 View All Bid Records
+                  </button>
+                </div>
               </div>
             )}
 
@@ -437,12 +433,20 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
               <div className="bidders-section">
                 <div className="section-header">
                   <h3>Invited Bidders</h3>
-                  <span className="bidders-count">
-                    {displayAuction.auction_bidders?.length ||
-                      displayAuction.InvitedBidders?.split(", ").length ||
-                      0}{" "}
-                    bidders invited
-                  </span>
+                  <div className="section-actions">
+                    <span className="bidders-count">
+                      {displayAuction.auction_bidders?.length ||
+                        displayAuction.InvitedBidders?.split(", ").length ||
+                        0}{" "}
+                      bidders invited
+                    </span>
+                    <button
+                      className="btn btn-bid-records btn-small"
+                      onClick={handleViewBidRecords}
+                    >
+                      📋 View Bid Records
+                    </button>
+                  </div>
                 </div>
 
                 <div className="bidders-table-container">
@@ -505,9 +509,17 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
               <div className="rankings-section">
                 <div className="section-header">
                   <h3>Bidding Reports & Rankings</h3>
-                  <span className="participation-count">
-                    {rankings.length} bidders participated
-                  </span>
+                  <div className="section-actions">
+                    <span className="participation-count">
+                      {rankings.length} bidders participated
+                    </span>
+                    <button
+                      className="btn btn-bid-records btn-small"
+                      onClick={handleViewBidRecords}
+                    >
+                      📋 View All Bid Records
+                    </button>
+                  </div>
                 </div>
 
                 {rankings.length > 0 ? (
@@ -764,6 +776,14 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bid Records Modal */}
+      {showBidRecordsModal && (
+        <BidRecordsModal
+          auction={displayAuction}
+          onClose={handleCloseBidRecords}
+        />
       )}
     </>
   );
