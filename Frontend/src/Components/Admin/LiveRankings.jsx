@@ -31,22 +31,16 @@ const LiveRankings = () => {
     });
   };
 
-  // Check if auction is live
-  const isAuctionLive = useCallback((auction) => {
-    const now = new Date();
-    const auctionStart = new Date(`${auction.auction_date}T${auction.start_time}`);
-    const auctionEnd = new Date(auctionStart.getTime() + auction.duration_minutes * 60000);
-    return now >= auctionStart && now <= auctionEnd;
-  }, []);
-
-  // Update timer for selected auction
+  // Update timer for selected auction using server-provided time data
   const updateTimer = useCallback(() => {
-    if (!selectedAuction) return;
+    if (!selectedAuction || !selectedAuction.time_remaining_ms) {
+      setTimeLeft('00:00');
+      return;
+    }
 
-    const now = new Date();
-    const auctionStart = new Date(`${selectedAuction.auction_date}T${selectedAuction.start_time}`);
-    const auctionEnd = new Date(auctionStart.getTime() + selectedAuction.duration_minutes * 60000);
-    const timeRemaining = auctionEnd - now;
+    // Calculate time remaining from the last fetched data
+    const timeRemaining = Math.max(0, selectedAuction.time_remaining_ms - 
+      (Date.now() - (selectedAuction.last_fetched || Date.now())));
     
     if (timeRemaining <= 0) {
       setTimeLeft('00:00');
@@ -58,11 +52,12 @@ const LiveRankings = () => {
     }
   }, [selectedAuction]);
 
-  // Fetch live auctions
+  // Fetch live auctions - FIXED URL
   const fetchLiveAuctions = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/admin/auctions/live/admin', {
+      // FIXED: Correct API endpoint path
+      const response = await fetch('http://localhost:5000/api/auction/live/admin', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -70,35 +65,47 @@ const LiveRankings = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch live auctions');
+        throw new Error(`Failed to fetch live auctions: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('Live auctions response:', data); // Debug log
+      
       if (data.success) {
-        const liveAuctionsList = data.auctions.filter(auction => isAuctionLive(auction));
-        setLiveAuctions(liveAuctionsList);
+        // Mark when data was fetched for timer calculations
+        const auctionsWithTimestamp = data.auctions.map(auction => ({
+          ...auction,
+          last_fetched: Date.now()
+        }));
+        
+        setLiveAuctions(auctionsWithTimestamp);
         
         // Auto-select first live auction
-        if (liveAuctionsList.length > 0 && !selectedAuction) {
-          setSelectedAuction(liveAuctionsList[0]);
-        } else if (liveAuctionsList.length === 0) {
+        if (auctionsWithTimestamp.length > 0 && !selectedAuction) {
+          setSelectedAuction(auctionsWithTimestamp[0]);
+        } else if (auctionsWithTimestamp.length === 0) {
           setSelectedAuction(null);
           setRankings([]);
         }
+        
+        setError(null); // Clear any previous errors
+      } else {
+        throw new Error(data.message || 'Failed to fetch live auctions');
       }
     } catch (err) {
       console.error('Error fetching live auctions:', err);
-      setError('Failed to fetch live auctions');
+      setError(`Failed to fetch live auctions: ${err.message}`);
     }
-  }, [isAuctionLive, selectedAuction]);
+  }, [selectedAuction]);
 
-  // Fetch rankings for selected auction
+  // Fetch rankings for selected auction - FIXED URL
   const fetchRankings = useCallback(async (auctionId) => {
     if (!auctionId) return;
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/admin/auctions/${auctionId}/rankings`, {
+      // FIXED: Correct API endpoint path
+      const response = await fetch(`http://localhost:5000/api/auction/live/${auctionId}/rankings`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -106,24 +113,31 @@ const LiveRankings = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch rankings');
+        throw new Error(`Failed to fetch rankings: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('Rankings response:', data); // Debug log
+      
       if (data.success) {
         setRankings(data.rankings || []);
+        setError(null);
+      } else {
+        throw new Error(data.message || 'Failed to fetch rankings');
       }
     } catch (err) {
       console.error('Error fetching rankings:', err);
-      setError('Failed to fetch rankings');
+      setError(`Failed to fetch rankings: ${err.message}`);
     }
   }, []);
 
-  // Fetch overall results
+  // Fetch overall results - CREATE A MOCK IMPLEMENTATION SINCE ENDPOINT DOESN'T EXIST
   const fetchOverallResults = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/admin/auctions/results', {
+      
+      // Since the results endpoint doesn't exist, let's fetch completed auctions from the main endpoint
+      const response = await fetch('http://localhost:5000/api/auction/all', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -131,16 +145,36 @@ const LiveRankings = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch overall results');
+        throw new Error(`Failed to fetch auction results: ${response.status}`);
       }
 
       const data = await response.json();
-      if (data.success) {
-        setOverallResults(data.results || []);
+      console.log('Overall results response:', data); // Debug log
+      
+      if (data.success && data.auctions) {
+        // Filter for completed auctions and format as results
+        const completedAuctions = data.auctions
+          .filter(auction => auction.status === 'completed' || auction.status === 'ended')
+          .map(auction => ({
+            auction_id: auction.auction_id,
+            title: auction.title,
+            auction_date: auction.auction_date,
+            status: auction.status,
+            winning_bidder_id: auction.winning_bidder_id || null,
+            bidder_name: auction.winning_bidder_name || null,
+            winning_price: auction.winning_price || null
+          }));
+          
+        setOverallResults(completedAuctions);
+        setError(null);
+      } else {
+        throw new Error(data.message || 'Failed to fetch auction results');
       }
     } catch (err) {
       console.error('Error fetching overall results:', err);
-      setError('Failed to fetch overall results');
+      setError(`Failed to fetch auction results: ${err.message}`);
+      // Set empty results on error instead of keeping old data
+      setOverallResults([]);
     }
   }, []);
 
@@ -148,12 +182,16 @@ const LiveRankings = () => {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
+      setError(null);
+      
       try {
-        await Promise.all([
-          fetchLiveAuctions(),
-          fetchOverallResults()
-        ]);
+        if (activeTab === 'liveRankings') {
+          await fetchLiveAuctions();
+        } else if (activeTab === 'overallResults') {
+          await fetchOverallResults();
+        }
       } catch (err) {
+        console.error('Error loading data:', err);
         setError('Failed to load data');
       } finally {
         setLoading(false);
@@ -161,16 +199,16 @@ const LiveRankings = () => {
     };
 
     loadData();
-  }, []);
+  }, [activeTab]); // Reload when tab changes
 
   // Auto-refresh live data
   useEffect(() => {
+    if (activeTab !== 'liveRankings') return;
+
     const interval = setInterval(() => {
-      if (activeTab === 'liveRankings') {
-        fetchLiveAuctions();
-        if (selectedAuction) {
-          fetchRankings(selectedAuction.id);
-        }
+      fetchLiveAuctions();
+      if (selectedAuction) {
+        fetchRankings(selectedAuction.auction_id || selectedAuction.id);
       }
     }, 5000); // Refresh every 5 seconds
 
@@ -189,7 +227,13 @@ const LiveRankings = () => {
   // Handle auction selection
   const handleAuctionSelect = (auction) => {
     setSelectedAuction(auction);
-    fetchRankings(auction.id);
+    fetchRankings(auction.auction_id || auction.id);
+  };
+
+  // Handle tab change
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setError(null); // Clear errors when switching tabs
   };
 
   if (loading) {
@@ -210,7 +254,7 @@ const LiveRankings = () => {
         <li className="nav-item">
           <button 
             className={`nav-link ${activeTab === 'liveRankings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('liveRankings')}
+            onClick={() => handleTabChange('liveRankings')}
           >
             <i className="fas fa-trophy me-2"></i>
             Live Rankings
@@ -219,7 +263,7 @@ const LiveRankings = () => {
         <li className="nav-item">
           <button 
             className={`nav-link ${activeTab === 'overallResults' ? 'active' : ''}`}
-            onClick={() => setActiveTab('overallResults')}
+            onClick={() => handleTabChange('overallResults')}
           >
             <i className="fas fa-chart-line me-2"></i>
             Overall Results
@@ -240,13 +284,20 @@ const LiveRankings = () => {
               {liveAuctions.length === 0 ? (
                 <div className="text-center p-3">
                   <i className="fas fa-clock fa-2x text-muted mb-2"></i>
-                  <p className="text-muted">No live auctions</p>
+                  <p className="text-muted">No live auctions currently active</p>
+                  <button 
+                    className="btn btn-sm btn-outline-primary"
+                    onClick={() => fetchLiveAuctions()}
+                  >
+                    <i className="fas fa-sync-alt me-1"></i>
+                    Refresh
+                  </button>
                 </div>
               ) : (
                 <div className="list-group">
                   {liveAuctions.map((auction) => (
                     <button
-                      key={auction.id}
+                      key={auction.id || auction.auction_id}
                       className={`list-group-item list-group-item-action ${
                         selectedAuction?.id === auction.id ? 'active' : ''
                       }`}
@@ -257,7 +308,7 @@ const LiveRankings = () => {
                           <h6 className="mb-1">{auction.auction_id}</h6>
                           <p className="mb-1 small">{auction.title}</p>
                           <small className="text-muted">
-                            Started: {formatTime(`${auction.auction_date}T${auction.start_time}`)}
+                            Duration: {auction.duration_minutes} min
                           </small>
                         </div>
                         <span className="badge bg-success">LIVE</span>
@@ -285,6 +336,34 @@ const LiveRankings = () => {
                     </div>
                   </div>
 
+                  {/* Auction Stats */}
+                  <div className="row mb-3">
+                    <div className="col-md-3">
+                      <div className="text-center p-2 bg-light rounded">
+                        <div className="h6 mb-0">{selectedAuction.invited_bidders || selectedAuction.invited_bidder_count || 0}</div>
+                        <small className="text-muted">Invited</small>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="text-center p-2 bg-light rounded">
+                        <div className="h6 mb-0">{selectedAuction.active_bidders || selectedAuction.active_bidder_count || 0}</div>
+                        <small className="text-muted">Active</small>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="text-center p-2 bg-light rounded">
+                        <div className="h6 mb-0">{selectedAuction.total_bids || 0}</div>
+                        <small className="text-muted">Total Bids</small>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="text-center p-2 bg-light rounded">
+                        <div className="h6 mb-0">{selectedAuction.participation_rate || 0}%</div>
+                        <small className="text-muted">Participation</small>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="table-responsive">
                     <table className="table table-bordered table-hover">
                       <thead className="table-dark">
@@ -292,7 +371,8 @@ const LiveRankings = () => {
                           <th>Rank</th>
                           <th>Bidder ID</th>
                           <th>Bidder Name</th>
-                          <th>Latest Bid</th>
+                          <th>Company</th>
+                          <th>Best Bid</th>
                           <th>Bid Time</th>
                           <th>Status</th>
                         </tr>
@@ -304,11 +384,12 @@ const LiveRankings = () => {
                               <td>
                                 <strong className={index === 0 ? 'text-success' : ''}>
                                   {index === 0 && <i className="fas fa-crown me-1"></i>}
-                                  #{index + 1}
+                                  #{ranking.rank}
                                 </strong>
                               </td>
                               <td><strong>{ranking.user_id}</strong></td>
                               <td>{ranking.name}</td>
+                              <td><small>{ranking.company || 'N/A'}</small></td>
                               <td>
                                 <strong className="text-primary">
                                   {formatCurrency(ranking.amount)}
@@ -318,16 +399,16 @@ const LiveRankings = () => {
                                 <small>{formatTime(ranking.bid_time)}</small>
                               </td>
                               <td>
-                                <span className="badge bg-success">
+                                <span className={`badge ${index === 0 ? 'bg-success' : 'bg-secondary'}`}>
                                   <i className="fas fa-circle me-1" style={{fontSize: '8px'}}></i>
-                                  Active
+                                  {index === 0 ? 'LEADING' : 'Active'}
                                 </span>
                               </td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan="6" className="text-center text-muted p-4">
+                            <td colSpan="7" className="text-center text-muted p-4">
                               <i className="fas fa-info-circle me-2"></i>
                               No bids placed yet
                             </td>
@@ -410,6 +491,7 @@ const LiveRankings = () => {
                         <span className={`badge ${
                           result.status === 'completed' ? 'bg-success' : 
                           result.status === 'cancelled' ? 'bg-danger' : 
+                          result.status === 'ended' ? 'bg-info' :
                           'bg-warning'
                         }`}>
                           {result.status?.toUpperCase()}
@@ -421,7 +503,8 @@ const LiveRankings = () => {
                   <tr>
                     <td colSpan="7" className="text-center text-muted p-4">
                       <i className="fas fa-chart-line fa-2x mb-2"></i>
-                      <div>No auction results available</div>
+                      <div>No completed auction results available</div>
+                      <small>Results will appear here once auctions are completed</small>
                     </td>
                   </tr>
                 )}
@@ -429,28 +512,28 @@ const LiveRankings = () => {
             </table>
           </div>
 
-          {overallResults.length > 0 && (
-            <div className="mt-3">
-              <div className="row">
-                <div className="col-md-6">
-                  <small className="text-muted">
-                    Showing {overallResults.length} auction result{overallResults.length > 1 ? 's' : ''}
-                  </small>
-                </div>
-                <div className="col-md-6 text-end">
-                  <button 
-                    className="btn btn-sm btn-outline-primary"
-                    onClick={() => {
-                      fetchOverallResults();
-                    }}
-                  >
-                    <i className="fas fa-sync-alt me-1"></i>
-                    Refresh
-                  </button>
-                </div>
+          <div className="mt-3">
+            <div className="row">
+              <div className="col-md-6">
+                <small className="text-muted">
+                  Showing {overallResults.length} auction result{overallResults.length !== 1 ? 's' : ''}
+                </small>
+              </div>
+              <div className="col-md-6 text-end">
+                <button 
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={() => {
+                    setLoading(true);
+                    fetchOverallResults().finally(() => setLoading(false));
+                  }}
+                  disabled={loading}
+                >
+                  <i className="fas fa-sync-alt me-1"></i>
+                  Refresh
+                </button>
               </div>
             </div>
-          )}
+          </div>
         </Card>
       )}
     </div>

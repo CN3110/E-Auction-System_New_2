@@ -278,13 +278,60 @@ const getLiveAuctionsForAdmin = async (req, res) => {
     const liveAuctions = [];
 
     for (const auction of auctions) {
+      console.log(`\n--- Processing auction ${auction.auction_id} for admin ---`);
+      console.log('Raw auction_date:', auction.auction_date);
+      console.log('Raw start_time:', auction.start_time);
+      
+      // FIX: Properly handle the date parsing
+      let auctionDateStr;
+      if (auction.auction_date instanceof Date) {
+        // If it's a Date object
+        auctionDateStr = moment(auction.auction_date).format('YYYY-MM-DD');
+      } else if (typeof auction.auction_date === 'string') {
+        // If it's an ISO string (like "2025-08-18T18:30:00.000Z"), parse it first
+        const parsedDate = moment(auction.auction_date);
+        if (parsedDate.isValid()) {
+          auctionDateStr = parsedDate.format('YYYY-MM-DD');
+        } else {
+          console.error('Invalid auction_date format:', auction.auction_date);
+          continue; // Skip this auction
+        }
+      } else {
+        console.error('Unexpected auction_date format:', auction.auction_date, typeof auction.auction_date);
+        continue; // Skip this auction
+      }
+
+      // Clean up start_time format
+      let startTimeStr = String(auction.start_time);
+      if (startTimeStr.includes('.')) {
+        startTimeStr = startTimeStr.split('.')[0];
+      }
+
+      console.log('Parsed auction date:', auctionDateStr);
+      console.log('Cleaned start time:', startTimeStr);
+
+      // Create start and end datetime
+      const startDateTime = moment.tz(
+        `${auctionDateStr} ${startTimeStr}`,
+        'YYYY-MM-DD HH:mm:ss',
+        'Asia/Colombo'
+      );
+
+      if (!startDateTime.isValid()) {
+        console.error(`Invalid start datetime for auction ${auction.auction_id}:`, `${auctionDateStr} ${startTimeStr}`);
+        continue; // Skip this auction
+      }
+
+      const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+
+      console.log('Start DateTime:', startDateTime.format('YYYY-MM-DD HH:mm:ss'));
+      console.log('End DateTime:', endDateTime.format('YYYY-MM-DD HH:mm:ss'));
+      console.log('Current Time:', nowSL.format('YYYY-MM-DD HH:mm:ss'));
+
+      // Check if this auction is actually live
       if (isAuctionLive(auction)) {
-        const startDateTime = moment.tz(
-          `${auction.auction_date} ${auction.start_time}`,
-          'YYYY-MM-DD HH:mm:ss',
-          'Asia/Colombo'
-        );
-        const endDateTime = startDateTime.clone().add(auction.duration_minutes, 'minutes');
+        console.log(`✅ Auction ${auction.auction_id} is LIVE for admin view`);
+        
         const timeRemaining = endDateTime.diff(nowSL, 'milliseconds');
 
         liveAuctions.push({
@@ -294,7 +341,7 @@ const getLiveAuctionsForAdmin = async (req, res) => {
           time_remaining_ms: Math.max(0, timeRemaining),
           start_datetime_sl: startDateTime.format('YYYY-MM-DD HH:mm:ss'),
           end_datetime_sl: endDateTime.format('YYYY-MM-DD HH:mm:ss'),
-          time_until_end: moment.duration(timeRemaining).humanize(),
+          time_until_end: moment.duration(Math.max(0, timeRemaining)).humanize(),
           invited_bidders: auction.invited_bidder_count || 0,
           active_bidders: auction.active_bidder_count || 0,
           total_bids: auction.total_bids || 0,
@@ -305,20 +352,29 @@ const getLiveAuctionsForAdmin = async (req, res) => {
               ? ((auction.active_bidder_count / auction.invited_bidder_count) * 100).toFixed(2)
               : 0
         });
+      } else {
+        console.log(`❌ Auction ${auction.auction_id} is NOT live for admin view`);
       }
     }
 
-    console.log(`Found ${liveAuctions.length} currently live auctions`);
+    console.log(`Found ${liveAuctions.length} currently live auctions for admin`);
 
     res.json({
       success: true,
       count: liveAuctions.length,
       auctions: liveAuctions,
-      current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss')
+      current_time_sl: nowSL.format('YYYY-MM-DD HH:mm:ss'),
+      message: liveAuctions.length > 0 
+        ? `${liveAuctions.length} auction(s) are currently live`
+        : 'No auctions are currently live'
     });
   } catch (error) {
     console.error('Get admin live auctions error:', error);
-    res.status(500).json({ success: false, error: 'Internal server error' });
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
