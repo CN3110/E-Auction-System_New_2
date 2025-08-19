@@ -93,7 +93,7 @@ export const getAuctionDetails = async (auctionId) => {
 
 export const getAuctionRankings = async (auctionId) => {
   try {
-    const response = await api.get(`/auction/${auctionId}/rankings`);
+    const response = await api.get(`/auction/live/${auctionId}/rankings`);
     return {
       success: true,
       rankings: response.rankings || []
@@ -118,15 +118,6 @@ export const deleteAuction = async (auctionId) => {
     return await api.delete(`/auction/${auctionId}`);
   } catch (error) {
     console.error('Delete auction error:', error);
-    throw error;
-  }
-};
-
-export const getAuctionStatistics = async (auctionId) => {
-  try {
-    return await api.get(`/auction/${auctionId}/statistics`);
-  } catch (error) {
-    console.error('Get auction statistics error:', error);
     throw error;
   }
 };
@@ -189,6 +180,110 @@ const getToken = () => {
   return localStorage.getItem('token');
 };
 
+// Add these functions to your Frontend/src/services/auctionService.js
+
+/**
+ * Get detailed statistics for a specific auction
+ * @param {string} auctionId - The auction ID
+ * @returns {Promise} - Promise resolving to auction statistics
+ */
+export const getAuctionStatistics = async (auctionId) => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    console.log('Fetching auction statistics for:', auctionId);
+
+    const response = await fetch(`${API_URL}/api/auction/${auctionId}/statistics`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch auction statistics');
+    }
+
+    console.log('Auction statistics received:', data);
+    return data;
+
+  } catch (error) {
+    console.error('Error fetching auction statistics:', error);
+    throw error;
+  }
+};
+
+export const getActivelyParticipatingBidders = async (auctionId) => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    console.log('Fetching actively participating bidders for:', auctionId);
+
+    const response = await fetch(`${API_URL}/api/auction/${auctionId}/active-bidders`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch actively participating bidders');
+    }
+
+    console.log('Active bidders data received:', data);
+    return data;
+
+  } catch (error) {
+    console.error('Error fetching actively participating bidders:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get comprehensive auction data including statistics and active bidders
+ * @param {string} auctionId - The auction ID
+ * @returns {Promise} - Promise resolving to comprehensive auction data
+ */
+export const getAuctionComprehensiveData = async (auctionId) => {
+  try {
+    console.log('Fetching comprehensive auction data for:', auctionId);
+
+    // Fetch both statistics and active bidders data in parallel
+    const [statsResponse, biddersResponse] = await Promise.all([
+      getAuctionStatistics(auctionId),
+      getActivelyParticipatingBidders(auctionId)
+    ]);
+
+    const comprehensiveData = {
+      statistics: statsResponse.stats,
+      active_bidders: biddersResponse.active_bidders,
+      summary: biddersResponse.summary,
+      auction_info: biddersResponse.auction,
+      current_time_sl: statsResponse.current_time_sl || biddersResponse.current_time_sl,
+      last_updated: statsResponse.stats?.last_updated
+    };
+
+    console.log('Comprehensive auction data received:', comprehensiveData);
+    return comprehensiveData;
+
+  } catch (error) {
+    console.error('Error fetching comprehensive auction data:', error);
+    throw error;
+  }
+};
+
 // Export methods for use in components
 export default {
   fetchActiveBidders,
@@ -198,5 +293,6 @@ export default {
   getAuctionRankings,
   updateAuction,
   deleteAuction,
-  getAuctionStatistics
+  getAuctionStatistics,
+  getActivelyParticipatingBidders
 };

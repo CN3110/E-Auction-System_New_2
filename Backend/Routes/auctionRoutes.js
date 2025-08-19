@@ -20,7 +20,9 @@ const {
   getLiveAuctionsForAdmin,
   getLiveAuctionDetails,
   getLiveAuctionRankings,
-  checkAuctionLiveStatus
+  checkAuctionLiveStatus,
+  getAuctionStatistics,        // NEW
+  getActivelyParticipatingBidders  // NEW
 } = require('../Controllers/liveAuction');
 
 // Import middleware
@@ -73,5 +75,12 @@ router.get('/live/:auctionId/rankings', authenticateToken, getLiveAuctionRanking
 // Check auction live status
 router.get('/live/:auctionId/status', authenticateToken, checkAuctionLiveStatus);
 
-module.exports = router;
+// ===== NEW STATISTICS ROUTES =====
 
+// Get detailed auction statistics (Admin only)
+router.get('/:auctionId/statistics', authenticateToken, requireAdminOrSystemAdmin, getAuctionStatistics);
+
+// Get actively participating bidders for an auction (Admin only)
+router.get('/:auctionId/active-bidders', authenticateToken, requireAdminOrSystemAdmin, getActivelyParticipatingBidders);
+
+module.exports = router;

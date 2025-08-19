@@ -590,7 +590,7 @@ const getLiveAuctionDetails = async (req, res) => {
   }
 };
 
-// Get live auction rankings
+// Get live auction rankings - FIXED reverse auction logic
 const getLiveAuctionRankings = async (req, res) => {
   try {
     const { auctionId } = req.params;
@@ -599,126 +599,114 @@ const getLiveAuctionRankings = async (req, res) => {
 
     console.log('Getting live auction rankings:', { auctionId, userId, userRole });
 
-    // Verify auction exists and is live
-    const { data: auction } = await query(
-      'SELECT * FROM auctions WHERE (id = ? OR auction_id = ?) AND status IN (?, ?)',
-      [auctionId, auctionId, 'approved', 'live']
-    );
+    // 1. Find auction (UUID or auction_id)
+    // 1. Find auction (UUID or auction_id)
+const { data: auctions, error: auctionError } = await query(
+  `SELECT * 
+   FROM auctions 
+   WHERE (id = ? OR auction_id = ?) 
+     AND status IN ('approved','live') 
+   LIMIT 1`,
+  [auctionId, auctionId]
+);
 
-    if (!auction || auction.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Live auction not found'
-      });
+if (auctionError) {
+  console.error('DB error:', auctionError);
+  return res.status(500).json({ success: false, error: 'Database error' });
+}
+
+const auction = auctions?.[0];
+if (!auction) {
+  return res.status(404).json({ success: false, error: 'Auction not found' });
+}
+
+
+    // 2. Check if auction is live
+    if (!isAuctionLive(auction)) {
+      return res.status(400).json({ success: false, error: 'Auction is not currently live' });
     }
 
-    const auctionData = auction[0];
-
-    // Check if auction is actually live
-    if (!isAuctionLive(auctionData)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Auction is not currently live'
-      });
-    }
-
-    // For bidders, verify they are invited
+    // 3. If bidder → verify invitation
     if (userRole === 'bidder') {
-      const { data: invitation } = await query(
+      const [invited] = await query(
         'SELECT 1 FROM auction_bidders WHERE auction_id = ? AND bidder_id = ?',
-        [auctionData.id, userId]
+        [auction.id, userId]
       );
-
-      if (!invitation || invitation.length === 0) {
-        return res.status(403).json({
-          success: false,
-          error: 'You are not invited to this auction'
-        });
+      if (!invited) {
+        return res.status(403).json({ success: false, error: 'You are not invited to this auction' });
       }
     }
 
-    // Get all bids with bidder information
-    const { data: allBids, error } = await query(`
-      SELECT b.bidder_id, b.amount, b.bid_time,
-             u.user_id, u.name, u.company
-      FROM bids b
-      JOIN users u ON b.bidder_id = u.id
-      WHERE b.auction_id = ?
-      ORDER BY b.bid_time DESC
-    `, [auctionData.id]);
+   // 4. Get lowest bid per bidder (reverse auction logic)
+const { data: bidsData, error: bidsError } = await query(
+  `SELECT b.bidder_id, b.amount, b.bid_time,
+          u.user_id, u.name, u.company
+   FROM bids b
+   JOIN users u ON b.bidder_id = u.id
+   INNER JOIN (
+     SELECT bidder_id, MIN(amount) AS min_amount
+     FROM bids
+     WHERE auction_id = ?
+     GROUP BY bidder_id
+   ) lb ON b.bidder_id = lb.bidder_id AND b.amount = lb.min_amount
+   WHERE b.auction_id = ?
+   ORDER BY b.amount ASC, b.bid_time ASC`,
+  [auction.id, auction.id]
+);
 
-    if (error) {
-      console.error('Get rankings error:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch rankings'
-      });
-    }
+if (bidsError) {
+  console.error('Get rankings error:', bidsError);
+  return res.status(500).json({ success: false, error: 'Failed to fetch rankings' });
+}
+
+const allBids = bidsData || [];   // ✅ make sure it's always an array
+
 
     if (!allBids || allBids.length === 0) {
       return res.json({
         success: true,
+        auction_id: auction.auction_id,
+        auction_title: auction.title,
         rankings: [],
         total_bidders: 0,
         current_leader: null,
         user_rank: null,
         user_best_bid: null,
         is_user_leading: false,
-        message: 'No bids placed yet'
+        message: 'No bids placed yet',
+        current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
       });
     }
 
-    // Group by bidder and get their lowest bid (reverse auction)
-    const bidderLowestBids = {};
-    allBids.forEach(bid => {
-      const bidderId = bid.bidder_id;
-      if (!bidderLowestBids[bidderId] || bid.amount < bidderLowestBids[bidderId].amount) {
-        bidderLowestBids[bidderId] = {
-          bidder_id: bidderId,
-          amount: bid.amount,
-          bid_time: bid.bid_time,
-          user_id: bid.user_id,
-          name: bid.name,
-          company: bid.company
-        };
-      }
-    });
+    // 5. Format rankings
+    const rankings = allBids.map((bid, index) => ({
+      rank: index + 1,
+      bidder_id: bid.bidder_id,
+      user_id: bid.user_id,
+      name: bid.name,
+      company: bid.company,
+      amount: bid.amount,
+      bid_time: bid.bid_time,
+      is_leader: index === 0
+    }));
 
-    // Create sorted rankings array
-    const rankings = Object.values(bidderLowestBids)
-      .sort((a, b) => {
-        if (a.amount !== b.amount) {
-          return a.amount - b.amount; // Lowest first
-        }
-        return new Date(a.bid_time) - new Date(b.bid_time); // Earliest first if tie
-      })
-      .map((bidder, index) => ({
-        rank: index + 1,
-        bidder_id: bidder.bidder_id,
-        user_id: bidder.user_id,
-        name: bidder.name,
-        company: bidder.company,
-        amount: bidder.amount,
-        bid_time: bidder.bid_time,
-        is_leader: index === 0
-      }));
-
-    // Find current user's data (if bidder)
     const userRanking = rankings.find(r => r.bidder_id === userId);
 
     res.json({
       success: true,
-      rankings: rankings || [],
+      auction_id: auction.auction_id,
+      auction_title: auction.title,
+      rankings,
       total_bidders: rankings.length,
-      current_leader: rankings.length > 0 ? rankings[0] : null,
-      lowest_bid: rankings.length > 0 ? rankings[0].amount : null,
-      // Bidder-specific data
+      current_leader: rankings[0] || null,
+      lowest_bid: rankings[0]?.amount || null,
       ...(userRole === 'bidder' ? {
         user_rank: userRanking?.rank || null,
         user_best_bid: userRanking?.amount || null,
         is_user_leading: userRanking?.rank === 1 || false
       } : {}),
-      current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
+      current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss'),
+      message: `Current rankings for ${auction.auction_id}`
     });
 
   } catch (error) {
@@ -730,6 +718,9 @@ const getLiveAuctionRankings = async (req, res) => {
     });
   }
 };
+
+
+
 
 // Check auction live status
 const checkAuctionLiveStatus = async (req, res) => {
@@ -791,12 +782,285 @@ const checkAuctionLiveStatus = async (req, res) => {
   }
 };
 
+// Add this function to your Backend/Controllers/liveAuction.js
+
+/**
+ * Get detailed auction statistics for admin view
+ * @param {string} auctionId - The auction ID (either id or auction_id)
+ * @returns {Object} - Auction statistics including invited, active bidders, and total bids
+ */
+const getAuctionStats = async (auctionId) => {
+  try {
+    console.log('Getting auction stats for:', auctionId);
+
+    // Get auction details first to validate it exists
+    const { data: auction, error: auctionError } = await query(
+      'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
+      [auctionId, auctionId]
+    );
+
+    if (auctionError || !auction || auction.length === 0) {
+      throw new Error('Auction not found');
+    }
+
+    const auctionData = auction[0];
+
+    // 1. Get count of invited bidders for this auction
+    const { data: invitedBiddersResult, error: invitedError } = await query(`
+      SELECT COUNT(DISTINCT ab.bidder_id) as invited_count,
+             COUNT(ab.id) as total_invitations
+      FROM auction_bidders ab
+      WHERE ab.auction_id = ?
+    `, [auctionData.id]);
+
+    if (invitedError) {
+      console.error('Error getting invited bidders count:', invitedError);
+      throw new Error('Failed to get invited bidders count');
+    }
+
+    const invitedCount = invitedBiddersResult[0]?.invited_count || 0;
+
+    // 2. Get count of actively participating bidders (bidders who have placed at least one bid)
+    const { data: activeBiddersResult, error: activeError } = await query(`
+      SELECT COUNT(DISTINCT b.bidder_id) as active_count
+      FROM bids b
+      WHERE b.auction_id = ?
+    `, [auctionData.id]);
+
+    if (activeError) {
+      console.error('Error getting active bidders count:', activeError);
+      throw new Error('Failed to get active bidders count');
+    }
+
+    const activeCount = activeBiddersResult[0]?.active_count || 0;
+
+    // 3. Get total number of bids placed in this auction
+    const { data: totalBidsResult, error: bidsError } = await query(`
+      SELECT COUNT(b.id) as total_bids
+      FROM bids b
+      WHERE b.auction_id = ?
+    `, [auctionData.id]);
+
+    if (bidsError) {
+      console.error('Error getting total bids count:', bidsError);
+      throw new Error('Failed to get total bids count');
+    }
+
+    const totalBids = totalBidsResult[0]?.total_bids || 0;
+
+    // 4. Get additional statistics (optional but useful)
+    const { data: bidStatsResult, error: bidStatsError } = await query(`
+      SELECT 
+        MIN(b.amount) as lowest_bid,
+        MAX(b.amount) as highest_bid,
+        AVG(b.amount) as average_bid,
+        COUNT(DISTINCT DATE(b.bid_time)) as active_days
+      FROM bids b
+      WHERE b.auction_id = ?
+    `, [auctionData.id]);
+
+    let bidStats = {};
+    if (!bidStatsError && bidStatsResult && bidStatsResult.length > 0) {
+      bidStats = {
+        lowest_bid: bidStatsResult[0].lowest_bid,
+        highest_bid: bidStatsResult[0].highest_bid,
+        average_bid: bidStatsResult[0].average_bid ? parseFloat(bidStatsResult[0].average_bid).toFixed(2) : null,
+        active_days: bidStatsResult[0].active_days || 0
+      };
+    }
+
+    // 5. Calculate participation rate
+    const participationRate = invitedCount > 0 ? ((activeCount / invitedCount) * 100).toFixed(2) : '0.00';
+
+    // 6. Get bidder details for active participants (optional - for detailed view)
+    const { data: activeBiddersDetails, error: detailsError } = await query(`
+      SELECT DISTINCT 
+        u.id as bidder_id,
+        u.user_id,
+        u.name,
+        u.company,
+        u.email,
+        COUNT(b.id) as total_bids_by_bidder,
+        MIN(b.amount) as lowest_bid_by_bidder,
+        MAX(b.bid_time) as last_bid_time
+      FROM bids b
+      JOIN users u ON b.bidder_id = u.id
+      WHERE b.auction_id = ?
+      GROUP BY u.id, u.user_id, u.name, u.company, u.email
+      ORDER BY COUNT(b.id) DESC, MIN(b.amount) ASC
+    `, [auctionData.id]);
+
+    const activeBiddersDetailsList = detailsError ? [] : (activeBiddersDetails || []);
+
+    const stats = {
+      auction_id: auctionData.auction_id,
+      auction_title: auctionData.title,
+      invited_bidders_count: invitedCount,
+      active_bidders_count: activeCount,
+      total_bids_count: totalBids,
+      participation_rate: parseFloat(participationRate),
+      ...bidStats,
+      active_bidders_details: activeBiddersDetailsList,
+      last_updated: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss')
+    };
+
+    console.log('Auction stats calculated:', stats);
+    return stats;
+
+  } catch (error) {
+    console.error('Error calculating auction stats:', error);
+    throw error;
+  }
+};
+
+/**
+ * API endpoint to get auction statistics
+ */
+const getAuctionStatistics = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+    const userRole = req.user.role;
+
+    // Check if user is authorized (admin or system_admin only)
+    if (!['admin', 'system_admin'].includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied. Admin privileges required.'
+      });
+    }
+
+    console.log('Admin requesting auction stats:', { auctionId, userRole });
+
+    const stats = await getAuctionStats(auctionId);
+
+    res.json({
+      success: true,
+      stats: stats,
+      message: 'Auction statistics retrieved successfully'
+    });
+
+  } catch (error) {
+    console.error('Get auction statistics error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get auction statistics',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * API endpoint to get actively participating bidders for an auction
+ */
+const getActivelyParticipatingBidders = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+    const userRole = req.user.role;
+
+    // Check if user is authorized (admin or system_admin only)
+    if (!['admin', 'system_admin'].includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied. Admin privileges required.'
+      });
+    }
+
+    console.log('Getting actively participating bidders for auction:', auctionId);
+
+    // Get auction details first
+    const { data: auction, error: auctionError } = await query(
+      'SELECT * FROM auctions WHERE id = ? OR auction_id = ?',
+      [auctionId, auctionId]
+    );
+
+    if (auctionError || !auction || auction.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Auction not found'
+      });
+    }
+
+    const auctionData = auction[0];
+
+    // Get actively participating bidders (bidders who have placed at least one bid)
+    const { data: activeBidders, error } = await query(`
+      SELECT DISTINCT 
+        u.id as bidder_id,
+        u.user_id,
+        u.name,
+        u.company,
+        u.email,
+        u.phone,
+        COUNT(b.id) as total_bids,
+        MIN(b.amount) as lowest_bid,
+        MAX(b.amount) as highest_bid,
+        MIN(b.bid_time) as first_bid_time,
+        MAX(b.bid_time) as last_bid_time,
+        AVG(b.amount) as average_bid
+      FROM bids b
+      JOIN users u ON b.bidder_id = u.id
+      WHERE b.auction_id = ?
+      GROUP BY u.id, u.user_id, u.name, u.company, u.email, u.phone
+      ORDER BY COUNT(b.id) DESC, MIN(b.amount) ASC
+    `, [auctionData.id]);
+
+    if (error) {
+      console.error('Error getting active bidders:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to get actively participating bidders'
+      });
+    }
+
+    // Get total invited bidders count for comparison
+    const { data: invitedCount } = await query(`
+      SELECT COUNT(DISTINCT bidder_id) as count
+      FROM auction_bidders
+      WHERE auction_id = ?
+    `, [auctionData.id]);
+
+    const totalInvited = invitedCount[0]?.count || 0;
+    const totalActive = activeBidders?.length || 0;
+    const participationRate = totalInvited > 0 ? ((totalActive / totalInvited) * 100).toFixed(2) : '0.00';
+
+    res.json({
+      success: true,
+      auction: {
+        id: auctionData.id,
+        auction_id: auctionData.auction_id,
+        title: auctionData.title
+      },
+      active_bidders: activeBidders || [],
+      summary: {
+        total_invited_bidders: totalInvited,
+        actively_participating_bidders: totalActive,
+        participation_rate: parseFloat(participationRate),
+        total_bids_in_auction: activeBidders?.reduce((sum, bidder) => sum + bidder.total_bids, 0) || 0
+      },
+      current_time_sl: getCurrentSLTime().format('YYYY-MM-DD HH:mm:ss'),
+      message: `Found ${totalActive} actively participating bidders out of ${totalInvited} invited bidders`
+    });
+
+  } catch (error) {
+    console.error('Get actively participating bidders error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Don't forget to export these new functions
 module.exports = {
   getLiveAuctionsForBidder,
   getLiveAuctionsForAdmin,
   getLiveAuctionDetails,
   getLiveAuctionRankings,
   checkAuctionLiveStatus,
+  getAuctionStatistics,        // NEW
+  getActivelyParticipatingBidders,  // NEW
+  getAuctionStats,            // NEW helper function
   isAuctionLive,
   getCurrentSLTime
 };
