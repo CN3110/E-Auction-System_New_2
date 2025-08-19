@@ -62,7 +62,7 @@ const LiveRankings = () => {
   const fetchLiveAuctions = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/admin/auctions/live', {
+      const response = await fetch('http://localhost:5000/api/admin/auctions/live/admin', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

@@ -17,6 +17,7 @@ const {
 // Import live auction controllers
 const {
   getLiveAuctionsForBidder,
+  getLiveAuctionsForAdmin,
   getLiveAuctionDetails,
   getLiveAuctionRankings,
   checkAuctionLiveStatus
@@ -61,7 +62,7 @@ router.get('/:auctionId', authenticateToken, getAuction);
 router.get('/live/bidder', authenticateToken, requireBidder, getLiveAuctionsForBidder);
 
 // Get live auctions for admin (all live auctions)
-//router.get('/live/admin', authenticateToken, requireAdminOrSystemAdmin, getLiveAuctionsForAdmin);
+router.get('/live/admin', authenticateToken, requireAdminOrSystemAdmin, getLiveAuctionsForAdmin);
 
 // Get specific live auction details
 router.get('/live/:auctionId/details', authenticateToken, getLiveAuctionDetails);
