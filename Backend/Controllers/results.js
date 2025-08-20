@@ -14,11 +14,11 @@ const awardBidder = async (req, res) => {
       if (auctionRows.length === 0) throw new Error('Auction not found');
       const auctionUuid = auctionRows[0].id;
 
-      // 2. Get bidder UUID
-      const [bidderRows] = await connection.execute(
-        'SELECT id FROM users WHERE user_id = ?',
-        [bidderId]
-      );
+      // Use this (if bidderId is UUID already)
+const [bidderRows] = await connection.execute(
+  'SELECT id FROM users WHERE id = ?',
+  [bidderId]
+);
       if (bidderRows.length === 0) throw new Error('Bidder not found');
       const bidderUuid = bidderRows[0].id;
 
@@ -74,7 +74,7 @@ const disqualifyBidder = async (req, res) => {
 
       // 2. Get bidder UUID
       const [bidderRows] = await connection.execute(
-        'SELECT id FROM users WHERE user_id = ?',
+        'SELECT id FROM users WHERE id = ?',
         [bidderId]
       );
       if (bidderRows.length === 0) throw new Error('Bidder not found');

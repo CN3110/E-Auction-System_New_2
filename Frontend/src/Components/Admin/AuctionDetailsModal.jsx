@@ -684,7 +684,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                         <thead>
                           <tr>
                             <th>Rank</th>
-                            <th>Bidder ID</th>
+                           
                             <th>Bidder Name</th>
                             <th>Company</th>
                             <th>Latest Bid Amount</th>
@@ -707,9 +707,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                                   {index === 0 ? "🥇" : `#${index + 1}`}
                                 </span>
                               </td>
-                              <td className="bidder-id">
-                                {bidder.bidder_user_id || bidder.bidder_id}
-                              </td>
+                              
                               <td className="bidder-name">{bidder.bidder_name}</td>
                               <td className="bidder-company">
                                 {bidder.company_name || "Not specified"}
@@ -961,7 +959,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
             <div className="modal-body">
               <div className="disqualify-form">
                 <div className="bidder-info">
-                  <p><strong>Bidder ID:</strong> {selectedBidder.bidder_user_id || selectedBidder.bidder_id}</p>
+                  
                   <p><strong>Bidder Name:</strong> {selectedBidder.bidder_name}</p>
                   <p><strong>Company:</strong> {selectedBidder.company_name || "Not specified"}</p>
                   <p><strong>Latest Bid:</strong> {formatCurrency(selectedBidder.latest_bid_amount)}</p>
