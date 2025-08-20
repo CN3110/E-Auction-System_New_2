@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import "../../styles/BidRecordsModal.css";
+import jsPDF from "jspdf";
+import * as XLSX from "xlsx";
 
 const BidRecordsModal = ({ auction, onClose }) => {
   const [bidRecords, setBidRecords] = useState([]);
@@ -9,12 +11,7 @@ const BidRecordsModal = ({ auction, onClose }) => {
   
   // Filter states
   const [filters, setFilters] = useState({
-    bidder: '',
-    company: '',
-    minAmount: '',
-    maxAmount: '',
-    dateRange: '',
-    resultStatus: ''
+    bidder: ''
   });
 
   // Sorting state
@@ -48,7 +45,6 @@ const BidRecordsModal = ({ auction, onClose }) => {
       const auctionId = auction.auction_id || auction.id || auction.AuctionID;
       console.log('Fetching bid records for auction:', auctionId);
 
-      // Replace with your actual API endpoint
       const response = await fetch(`http://localhost:5000/api/auction/${auctionId}/all-bids`, {
         method: 'GET',
         headers: {
@@ -82,62 +78,6 @@ const BidRecordsModal = ({ auction, onClose }) => {
    */
   const applyFilters = () => {
     let filtered = [...bidRecords];
-
-    // Apply filters
-    if (filters.bidder) {
-      filtered = filtered.filter(bid => 
-        bid.bidder_name?.toLowerCase().includes(filters.bidder.toLowerCase())
-      );
-    }
-
-    if (filters.company) {
-      filtered = filtered.filter(bid => 
-        bid.company_name?.toLowerCase().includes(filters.company.toLowerCase())
-      );
-    }
-
-    if (filters.minAmount) {
-      filtered = filtered.filter(bid => 
-        parseFloat(bid.bid_amount) >= parseFloat(filters.minAmount)
-      );
-    }
-
-    if (filters.maxAmount) {
-      filtered = filtered.filter(bid => 
-        parseFloat(bid.bid_amount) <= parseFloat(filters.maxAmount)
-      );
-    }
-
-    if (filters.resultStatus) {
-      filtered = filtered.filter(bid => 
-        bid.result_status === filters.resultStatus
-      );
-    }
-
-    if (filters.dateRange) {
-      const now = new Date();
-      let startDate = new Date();
-      
-      switch (filters.dateRange) {
-        case 'today':
-          startDate.setHours(0, 0, 0, 0);
-          break;
-        case 'week':
-          startDate.setDate(now.getDate() - 7);
-          break;
-        case 'month':
-          startDate.setMonth(now.getMonth() - 1);
-          break;
-        default:
-          startDate = null;
-      }
-
-      if (startDate) {
-        filtered = filtered.filter(bid => 
-          new Date(bid.bid_time) >= startDate
-        );
-      }
-    }
 
     // Apply sorting
     if (sortConfig.key) {
@@ -189,30 +129,6 @@ const BidRecordsModal = ({ auction, onClose }) => {
   };
 
   /**
-   * Handle filter changes
-   */
-  const handleFilterChange = (filterKey, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [filterKey]: value
-    }));
-  };
-
-  /**
-   * Clear all filters
-   */
-  const clearFilters = () => {
-    setFilters({
-      bidder: '',
-      company: '',
-      minAmount: '',
-      maxAmount: '',
-      dateRange: '',
-      resultStatus: ''
-    });
-  };
-
-  /**
    * Format currency
    */
   const formatCurrency = (amount) => {
@@ -222,24 +138,6 @@ const BidRecordsModal = ({ auction, onClose }) => {
       currency: "LKR",
       minimumFractionDigits: 2,
     }).format(amount);
-  };
-
-  /**
-   * Get status badge class
-   */
-  const getStatusBadgeClass = (status) => {
-    switch (status?.toLowerCase()) {
-      case 'awarded':
-        return 'status-badge status-awarded';
-      case 'not_awarded':
-        return 'status-badge status-not-awarded';
-      case 'pending':
-        return 'status-badge status-pending';
-      case 'disqualified':
-        return 'status-badge status-disqualified';
-      default:
-        return 'status-badge status-default';
-    }
   };
 
   /**
@@ -261,16 +159,166 @@ const BidRecordsModal = ({ auction, onClose }) => {
     }
   };
 
+  /**
+   * Export data to Excel using XLSX
+   */
+  const exportToExcel = () => {
+    if (filteredBids.length === 0) {
+      alert('No data to export');
+      return;
+    }
+
+    // Prepare data for Excel
+    const worksheetData = filteredBids.map(bid => ({
+      'Bid Time': new Date(bid.bid_time).toLocaleString('en-GB'),
+      'Bidder Name': bid.bidder_name || 'N/A',
+      'Company': bid.company_name || 'Not specified',
+      'Bid Amount (LKR)': parseFloat(bid.bid_amount)
+      
+    }));
+
+    // Create workbook and worksheet
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+    
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Bid Records');
+    
+    // Generate Excel file
+    const auctionId = auction.auction_id || auction.AuctionID;
+    const fileName = `bid_records_${auctionId}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    
+    XLSX.writeFile(workbook, fileName);
+  };
+
+  /**
+   * Export data to PDF using jsPDF (manual table creation)
+   */
+  const exportToPDF = () => {
+    if (filteredBids.length === 0) {
+      alert('No data to export');
+      return;
+    }
+
+    // Create new PDF document
+    const doc = new jsPDF();
+    const auctionId = auction.auction_id || auction.AuctionID;
+    const auctionTitle = auction.title || auction.Title;
+    const currentDate = new Date().toLocaleString('en-GB');
+    
+    // Add title
+    doc.setFontSize(18);
+    doc.text(`Bid Records - ${auctionId}`, 14, 22);
+    
+    // Add subtitle
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Auction: ${auctionTitle}`, 14, 30);
+    doc.text(`Generated on: ${currentDate}`, 14, 35);
+    doc.text(`Total Records: ${filteredBids.length}`, 14, 40);
+    
+    // Define table parameters
+    const startY = 50;
+    const lineHeight = 7;
+    const pageHeight = doc.internal.pageSize.height;
+    const margin = 14;
+    let currentY = startY;
+    
+    // Table headers
+    const headers = ['Bid Time', 'Bidder Name', 'Company', 'Bid Amount'];
+    const columnWidths = [40, 40, 40, 30];
+    
+    // Draw table headers
+    doc.setFillColor(41, 128, 185);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'bold');
+    
+    let currentX = margin;
+    headers.forEach((header, i) => {
+      doc.rect(currentX, currentY, columnWidths[i], lineHeight, 'F');
+      doc.text(header, currentX + 2, currentY + 5);
+      currentX += columnWidths[i];
+    });
+    
+    currentY += lineHeight;
+    
+    // Table data
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    
+    filteredBids.forEach((bid, index) => {
+      // Check if we need a new page
+      if (currentY > pageHeight - 20) {
+        doc.addPage();
+        currentY = margin;
+        
+        // Redraw headers on new page
+        doc.setFillColor(41, 128, 185);
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        
+        currentX = margin;
+        headers.forEach((header, i) => {
+          doc.rect(currentX, currentY, columnWidths[i], lineHeight, 'F');
+          doc.text(header, currentX + 2, currentY + 5);
+          currentX += columnWidths[i];
+        });
+        
+        currentY += lineHeight;
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+      }
+      
+      // Alternate row colors
+      if (index % 2 === 0) {
+        doc.setFillColor(245, 245, 245);
+        currentX = margin;
+        columnWidths.forEach(width => {
+          doc.rect(currentX, currentY, width, lineHeight, 'F');
+          currentX += width;
+        });
+      }
+      
+      // Row data
+      currentX = margin;
+      const rowData = [
+        new Date(bid.bid_time).toLocaleString('en-GB'),
+        bid.bidder_name || 'N/A',
+        bid.company_name || 'Not specified',
+        formatCurrency(bid.bid_amount)
+        
+      ];
+      
+      rowData.forEach((data, i) => {
+        doc.text(data.toString(), currentX + 2, currentY + 5);
+        currentX += columnWidths[i];
+      });
+      
+      currentY += lineHeight;
+    });
+    
+    // Add page numbers
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: 'center' });
+    }
+    
+    // Save the PDF
+    doc.save(`bid_records_${auctionId}_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   // Calculate pagination
   const indexOfLastRecord = currentPage * recordsPerPage;
   const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
   const currentRecords = filteredBids.slice(indexOfFirstRecord, indexOfLastRecord);
   const totalPages = Math.ceil(filteredBids.length / recordsPerPage);
-
-  // Get unique values for filter dropdowns
-  const uniqueBidders = [...new Set(bidRecords.map(bid => bid.bidder_name))].filter(Boolean);
-  const uniqueCompanies = [...new Set(bidRecords.map(bid => bid.company_name))].filter(Boolean);
-  const uniqueStatuses = [...new Set(bidRecords.map(bid => bid.result_status))].filter(Boolean);
 
   if (loading) {
     return (
@@ -321,92 +369,6 @@ const BidRecordsModal = ({ auction, onClose }) => {
           <button className="close-button" onClick={onClose}>×</button>
         </div>
 
-        {/* Filters Section */}
-        <div className="filters-section">
-          <div className="filters-header">
-            <h3>Filters</h3>
-            <button className="btn btn-clear" onClick={clearFilters}>
-              Clear All
-            </button>
-          </div>
-          
-          <div className="filters-grid">
-            <div className="filter-group">
-              <label>Bidder Name:</label>
-              <select
-                value={filters.bidder}
-                onChange={(e) => handleFilterChange('bidder', e.target.value)}
-              >
-                <option value="">All Bidders</option>
-                {uniqueBidders.map(bidder => (
-                  <option key={bidder} value={bidder}>{bidder}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-group">
-              <label>Company:</label>
-              <select
-                value={filters.company}
-                onChange={(e) => handleFilterChange('company', e.target.value)}
-              >
-                <option value="">All Companies</option>
-                {uniqueCompanies.map(company => (
-                  <option key={company} value={company}>{company}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-group">
-              <label>Min Amount:</label>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={filters.minAmount}
-                onChange={(e) => handleFilterChange('minAmount', e.target.value)}
-              />
-            </div>
-
-            <div className="filter-group">
-              <label>Max Amount:</label>
-              <input
-                type="number"
-                placeholder="999999.99"
-                value={filters.maxAmount}
-                onChange={(e) => handleFilterChange('maxAmount', e.target.value)}
-              />
-            </div>
-
-            <div className="filter-group">
-              <label>Date Range:</label>
-              <select
-                value={filters.dateRange}
-                onChange={(e) => handleFilterChange('dateRange', e.target.value)}
-              >
-                <option value="">All Time</option>
-                <option value="today">Today</option>
-                <option value="week">Last 7 Days</option>
-                <option value="month">Last 30 Days</option>
-              </select>
-            </div>
-
-            <div className="filter-group">
-              <label>Result Status:</label>
-              <select
-                value={filters.resultStatus}
-                onChange={(e) => handleFilterChange('resultStatus', e.target.value)}
-              >
-                <option value="">All Statuses</option>
-                {uniqueStatuses.map(status => (
-                  <option key={status} value={status}>
-                    {status ? status.replace('_', ' ').toUpperCase() : 'N/A'}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
         {/* Records Summary */}
         <div className="records-summary">
           <div className="summary-stats">
@@ -418,20 +380,14 @@ const BidRecordsModal = ({ auction, onClose }) => {
               <label>Filtered Records:</label>
               <span className="stat-value">{filteredBids.length}</span>
             </div>
-            <div className="stat-item">
-              <label>Showing:</label>
-              <span className="stat-value">
-                {indexOfFirstRecord + 1}-{Math.min(indexOfLastRecord, filteredBids.length)} of {filteredBids.length}
-              </span>
-            </div>
           </div>
           
           <div className="action-buttons">
-            <button className="btn btn-refresh" onClick={fetchBidRecords}>
-              🔄 Refresh
+            <button className="btn btn-export" onClick={exportToExcel}>
+              📊 Export Excel
             </button>
-            <button className="btn btn-export">
-              📊 Export CSV
+            <button className="btn btn-export" onClick={exportToPDF} style={{marginLeft: '10px'}}>
+              📄 Export PDF
             </button>
           </div>
         </div>
@@ -454,11 +410,6 @@ const BidRecordsModal = ({ auction, onClose }) => {
                   <th onClick={() => handleSort('bid_amount')}>
                     Amount{getSortIndicator('bid_amount')}
                   </th>
-                  <th>Winning Status</th>
-                  <th onClick={() => handleSort('result_status')}>
-                    Result Status{getSortIndicator('result_status')}
-                  </th>
-                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -480,34 +431,6 @@ const BidRecordsModal = ({ auction, onClose }) => {
                       <span className={bid.is_winning ? 'winning-amount' : 'regular-amount'}>
                         {formatCurrency(bid.bid_amount)}
                       </span>
-                    </td>
-                    <td className="winning-status">
-                      {bid.is_winning ? (
-                        <span className="status-badge status-winning">🏆 WINNING</span>
-                      ) : (
-                        <span className="status-badge status-regular">-</span>
-                      )}
-                    </td>
-                    <td className="result-status">
-                      <span className={getStatusBadgeClass(bid.result_status)}>
-                        {bid.result_status ? bid.result_status.replace('_', ' ').toUpperCase() : 'PENDING'}
-                      </span>
-                    </td>
-                    <td className="actions">
-                      <button 
-                        className="btn btn-small btn-info"
-                        title="View Details"
-                      >
-                        👁️
-                      </button>
-                      {bid.disqualification_reason && (
-                        <button 
-                          className="btn btn-small btn-warning"
-                          title={`Disqualified: ${bid.disqualification_reason}`}
-                        >
-                          ⚠️
-                        </button>
-                      )}
                     </td>
                   </tr>
                 ))}

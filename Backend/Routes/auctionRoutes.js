@@ -94,6 +94,9 @@ router.get('/:auctionId/active-bidders', authenticateToken, requireAdminOrSystem
 
 // ===== Award/Disqualify Endpoints ====
 
+// get top 5 bidders
+router.get('/:auctionId/top-bidders', authenticateToken, getTopBidders);
+
 // Award bidder
 router.post('/auction/:auctionId/award/:bidderId',authenticateToken, requireSystemAdmin, awardBidder);
 
@@ -103,7 +106,7 @@ router.post('/auction/:auctionId/disqualify/:bidderId', authenticateToken, requi
 // Get auction results
 //router.get('/auction/:auctionId/results', authenticateToken, getAuctionResults);
 
-// Get all records for an auction
+// Get all records for an auction - done
 router.get('/:auctionId/all-bids', authenticateToken, getAllAuctionBids);
 
 

@@ -1,6 +1,9 @@
 const db = require('../Config/database');
 const moment = require('moment-timezone');
 
+
+
+
 const awardBidder = async (req, res) => {
   const { auctionId, bidderId } = req.params;
   
@@ -81,7 +84,7 @@ const disqualifyBidder = async (req, res) => {
 };
 
 const getAllAuctionBids = async (req, res) => {
-  const { auctionId } = req.params; // This is "AUC1020"
+  const { auctionId } = req.params; 
   
   try {
     // First, get the auction UUID from the auction_id
