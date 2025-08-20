@@ -1219,3 +1219,388 @@
   background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
   transform: translateY(-2px);
 }
+
+
+/* Award and disqualigy scn */
+/* Top Bidders Section */
+.top-bidders-section {
+  margin-bottom: 2rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid #dee2e6;
+}
+
+.top-bidders-section h4 {
+  color: #2c3e50;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.top-bidders-table-container {
+  overflow-x: auto;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.top-bidders-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  font-size: 0.9rem;
+}
+
+.top-bidders-table th,
+.top-bidders-table td {
+  padding: 12px 8px;
+  text-align: left;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.top-bidders-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  color: #495057;
+  border-top: 1px solid #dee2e6;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.top-bidders-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* Row Status Styling */
+.bidder-row.awarded-row {
+  background-color: #d4edda !important;
+}
+
+.bidder-row.not-awarded-row {
+  background-color: #f8d7da !important;
+}
+
+.bidder-row.disqualified-row {
+  background-color: #f8d7da !important;
+  opacity: 0.8;
+}
+
+/* Column Specific Styling */
+.bidder-id {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  color: #007bff;
+}
+
+.bidder-name {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.bidder-company {
+  color: #6c757d;
+  font-style: italic;
+}
+
+/* Actions Column */
+.actions-cell {
+  min-width: 180px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-buttons .btn {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.btn-award {
+  background-color: #28a745;
+  color: white;
+}
+
+.btn-award:hover:not(:disabled) {
+  background-color: #218838;
+  transform: translateY(-1px);
+}
+
+.btn-disqualify {
+  background-color: #dc3545;
+  color: white;
+}
+
+.btn-disqualify:hover:not(:disabled) {
+  background-color: #c82333;
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Action Status Display */
+.action-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-text {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.awarded-text {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.not-awarded-text {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.disqualified-text {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+/* Status Badges Enhancement */
+.status-badge.status-awarded {
+  background-color: #28a745;
+  color: white;
+}
+
+.status-badge.status-not-awarded {
+  background-color: #dc3545;
+  color: white;
+}
+
+.status-badge.status-disqualified {
+  background-color: #6c757d;
+  color: white;
+}
+
+/* Disqualify Modal */
+.disqualify-modal {
+  max-width: 500px;
+  width: 90%;
+}
+
+.bidder-info {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.bidder-info p {
+  margin: 0.5rem 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.bidder-info strong {
+  color: #495057;
+}
+
+.disqualify-textarea,
+.rejection-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.disqualify-textarea:focus,
+.rejection-textarea:focus {
+  outline: none;
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.help-text {
+  color: #6c757d;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+  display: block;
+}
+
+.required {
+  color: #dc3545;
+}
+
+/* Section Actions Enhancement */
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.section-actions .btn-small {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+}
+
+.btn-refresh {
+  background-color: #17a2b8;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.btn-refresh:hover {
+  background-color: #138496;
+}
+
+/* All Rankings Section */
+.all-rankings-section {
+  border-top: 2px solid #dee2e6;
+  padding-top: 2rem;
+}
+
+.all-rankings-section h4 {
+  color: #6c757d;
+  margin-bottom: 1rem;
+}
+
+/* Enhanced Statistics Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+}
+
+.stat-item label {
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0;
+}
+
+.stat-item span {
+  font-weight: 700;
+  color: #2c3e50;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .top-bidders-table {
+    font-size: 0.8rem;
+  }
+  
+  .top-bidders-table th,
+  .top-bidders-table td {
+    padding: 8px 4px;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .action-buttons .btn {
+    font-size: 0.75rem;
+    padding: 3px 6px;
+  }
+  
+  .section-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Loading States */
+.action-buttons .btn:disabled {
+  position: relative;
+}
+
+.action-buttons .btn:disabled::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Enhanced Modal Backdrop for Multiple Modals */
+.modal-backdrop[style*="z-index: 1001"] {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+/* Success/Error Messages */
+.success-message {
+  background-color: #d4edda;
+  color: #155724;
+  padding: 0.75rem;
+  border: 1px solid #c3e6cb;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.error-message {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 0.75rem;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}

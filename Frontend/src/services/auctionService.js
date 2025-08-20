@@ -196,7 +196,7 @@ export const getAuctionStatistics = async (auctionId) => {
 
     console.log('Fetching auction statistics for:', auctionId);
 
-    const response = await fetch(`${API_URL}/api/auction/${auctionId}/statistics`, {
+    const response = await fetch(`${API_URL}/auction/${auctionId}/statistics`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -228,7 +228,7 @@ export const getActivelyParticipatingBidders = async (auctionId) => {
 
     console.log('Fetching actively participating bidders for:', auctionId);
 
-    const response = await fetch(`${API_URL}/api/auction/${auctionId}/active-bidders`, {
+    const response = await fetch(`${API_URL}/auction/${auctionId}/active-bidders`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -284,6 +284,121 @@ export const getAuctionComprehensiveData = async (auctionId) => {
   }
 };
 
+// Add these functions to your existing auctionService.js file
+
+/**
+ * Get top 5 bidders for an auction
+ */
+// auctionService.js - Add this function if it doesn't exist
+export const getTopBidders = async (auctionId) => {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`/auction/${auctionId}/top-bidders`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('Server returned non-JSON response');
+    }
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || `HTTP error! status: ${response.status}`);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Get top bidders error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Award a bidder for an auction
+ */
+export const awardBidder = async (auctionId, bidderId) => {
+  try {
+    const response = await fetch(`/auction/${auctionId}/award/${bidderId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to award bidder');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Award bidder error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Disqualify a bidder for an auction
+ */
+export const disqualifyBidder = async (auctionId, bidderId, reason) => {
+  try {
+    const response = await fetch(`/auction/${auctionId}/disqualify/${bidderId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ reason }),
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to disqualify bidder');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Disqualify bidder error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get all bid records for an auction
+ */
+export const getAllAuctionBids = async (auctionId) => {
+  try {
+    const response = await fetch(`/auction/${auctionId}/all-bids`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to fetch auction bids');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Get auction bids error:', error);
+    throw error;
+  }
+};
+
+
 // Export methods for use in components
 export default {
   fetchActiveBidders,
@@ -294,5 +409,9 @@ export default {
   updateAuction,
   deleteAuction,
   getAuctionStatistics,
-  getActivelyParticipatingBidders
+  getActivelyParticipatingBidders,
+  getTopBidders,
+  awardBidder,
+  disqualifyBidder,
+  getAllAuctionBids,
 };
