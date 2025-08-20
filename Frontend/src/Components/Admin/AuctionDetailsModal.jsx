@@ -658,6 +658,14 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
               <div className="top-bidders-section">
                 <div className="section-header">
                   <h3>🏆 Top 5 Bidders</h3>
+                   <div className="details-actions">
+                  <button
+                    className="btn btn-bid-records"
+                    onClick={handleViewBidRecords}
+                  >
+                    📋 View All Bid Records
+                  </button>
+                </div>
                   <div className="section-actions">
                     <span className="participation-count">
                       {topBidders.length} top bidders
@@ -674,9 +682,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                 {topBidders.length > 0 ? (
                   <div className="top-bidders-container">
                     <div className="top-bidders-explanation">
-                      <p className="explanation-text">
-                        <strong>Reverse Auction:</strong> Lowest bid wins. Rankings are sorted by lowest bid amount first.
-                      </p>
+                      
                     </div>
 
                     <div className="top-bidders-table-container">
@@ -769,57 +775,10 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                       </table>
                     </div>
 
-                    {/* Top Bidders Statistics */}
-                    <div className="top-bidders-statistics">
-                      <h4>Top Bidders Statistics</h4>
-                      <div className="stats-grid">
-                        <div className="stat-item">
-                          <label>Total Top Bidders:</label>
-                          <span>{topBidders.length}</span>
-                        </div>
-                        <div className="stat-item">
-                          <label>Lowest Bid (Winner):</label>
-                          <span className="winning-amount">
-                            {topBidders.length > 0
-                              ? formatCurrency(topBidders[0].latest_bid_amount)
-                              : "No bids"}
-                          </span>
-                        </div>
-                        <div className="stat-item">
-                          <label>Highest Bid:</label>
-                          <span>
-                            {topBidders.length > 0
-                              ? formatCurrency(
-                                  Math.max(...topBidders.map((r) => r.latest_bid_amount))
-                                )
-                              : "No bids"}
-                          </span>
-                        </div>
-                        <div className="stat-item">
-                          <label>Average Bid:</label>
-                          <span>
-                            {topBidders.length > 0
-                              ? formatCurrency(
-                                  topBidders.reduce((sum, r) => sum + r.latest_bid_amount, 0) /
-                                    topBidders.length
-                                )
-                              : "No bids"}
-                          </span>
-                        </div>
-                        <div className="stat-item">
-                          <label>Awarded Bidders:</label>
-                          <span className="awarded-count">
-                            {topBidders.filter(b => b.result_status === 'awarded').length}
-                          </span>
-                        </div>
-                        <div className="stat-item">
-                          <label>Disqualified Bidders:</label>
-                          <span className="disqualified-count">
-                            {topBidders.filter(b => b.result_status === 'disqualified').length}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    
+                        
+                       
+                        
                   </div>
                 ) : (
                   <div className="no-top-bidders-data">
@@ -916,7 +875,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                   required
                 />
                 <small className="help-text">
-                  This reason will be visible to the auction creator and other administrators.
+                  This reason will be visible to bidders.
                 </small>
               </div>
             </div>
