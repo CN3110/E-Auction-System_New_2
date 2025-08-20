@@ -98,10 +98,10 @@ router.get('/:auctionId/active-bidders', authenticateToken, requireAdminOrSystem
 router.get('/:auctionId/top-bidders', authenticateToken, getTopBidders);
 
 // Award bidder
-router.post('/auction/:auctionId/award/:bidderId',authenticateToken, requireSystemAdmin, awardBidder);
+router.post('/:auctionId/award/:bidderId',authenticateToken, requireSystemAdmin, awardBidder);
 
 // Disqualify bidder  
-router.post('/auction/:auctionId/disqualify/:bidderId', authenticateToken, requireSystemAdmin, disqualifyBidder);
+router.post('/:auctionId/disqualify/:bidderId', authenticateToken, requireSystemAdmin, disqualifyBidder);
 
 // Get auction results
 //router.get('/auction/:auctionId/results', authenticateToken, getAuctionResults);
