@@ -102,38 +102,65 @@ const disqualifyBidder = async (req, res) => {
 
 
 const getAllAuctionBids = async (req, res) => {
-  const { auctionId } = req.params;
-
+  const { auctionId } = req.params; 
+  
   try {
-    // ✅ Step 1: Resolve Auction UUID
-    const auctionResult = await db.query(
-      'SELECT id FROM auctions WHERE auction_id = ?',
-      [auctionId]
-    );
-
-    if (!auctionResult.data || auctionResult.data.length === 0) {
-      return res.status(404).json({ success: false, error: 'Auction not found' });
+    // First, get the auction UUID from the auction_id
+    const auctionResult = await db.query(`
+      SELECT id 
+      FROM auctions 
+      WHERE auction_id = ?
+    `, [auctionId]);
+    
+    if (auctionResult.error) {
+      throw auctionResult.error;
     }
-
-    const auctionUuid = auctionResult.data[0].id;
-
-    // ✅ Step 2: Fetch all bids for this auction
-    const bidsResult = await db.query(
-      `SELECT b.id, b.bid_amount, b.created_at, b.bidder_id, u.name AS bidder_name
-       FROM bids b
-       JOIN users u ON b.bidder_id = u.id
-       WHERE b.auction_id = ?
-       ORDER BY b.created_at ASC`,
-      [auctionUuid]
-    );
-
-    res.json({
-      success: true,
-      bids: bidsResult.data || []
+    
+    if (!auctionResult.data || auctionResult.data.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Auction not found' 
+      });
+    }
+    
+    const auctionUUID = auctionResult.data[0].id;
+    
+    // Now get all bids for this auction using the UUID
+    const result = await db.query(`
+      SELECT 
+        b.id as bid_id,
+        b.bidder_id,
+        u.user_id as bidder_user_id,
+        u.name as bidder_name,
+        u.company as company_name,
+        b.amount as bid_amount,
+        b.bid_time,
+        b.is_winning,
+        ar.status as result_status,
+        ar.disqualification_reason
+      FROM bids b
+      JOIN users u ON b.bidder_id = u.id
+      LEFT JOIN auction_results ar ON ar.auction_id = b.auction_id AND ar.bidder_id = b.bidder_id
+      WHERE b.auction_id = ?
+      ORDER BY b.bid_time DESC
+    `, [auctionUUID]);
+    
+    if (result.error) {
+      throw result.error;
+    }
+    
+    res.json({ 
+      success: true, 
+      bids: result.data,
+      auction_id: auctionId
     });
+    
   } catch (error) {
-    console.error('Get all auction bids error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Get auction bids error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 };
 

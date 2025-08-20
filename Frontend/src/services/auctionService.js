@@ -64,7 +64,7 @@ export const createAuction = async (auctionData) => {
 //get all auctions for admin
 export const getAllAuctions = async () => {
   try {
-    return await api.get('/auction/all');
+    return await api.get(`${API_URL}/auction/all`);
   } catch (error) {
     console.error('Get all auctions error:', error);
     throw error;
@@ -74,7 +74,7 @@ export const getAllAuctions = async () => {
 //get auction details for admin
 export const getAuctionDetails = async (auctionId) => {
   try {
-    const response = await api.get(`/auction/${auctionId}`);
+    const response = await api.get(`${API_URL}/auction/${auctionId}`);
     return {
       success: true,
       auction: {
@@ -93,7 +93,7 @@ export const getAuctionDetails = async (auctionId) => {
 
 export const getAuctionRankings = async (auctionId) => {
   try {
-    const response = await api.get(`/auction/live/${auctionId}/rankings`);
+    const response = await api.get(`${API_URL}/auction/live/${auctionId}/rankings`);
     return {
       success: true,
       rankings: response.rankings || []
@@ -106,7 +106,7 @@ export const getAuctionRankings = async (auctionId) => {
 
 export const updateAuction = async (auctionId, updateData) => {
   try {
-    return await api.put(`/auction/${auctionId}`, updateData);
+    return await api.put(`${API_URL}/auction/${auctionId}`, updateData);
   } catch (error) {
     console.error('Update auction error:', error);
     throw error;
@@ -115,7 +115,7 @@ export const updateAuction = async (auctionId, updateData) => {
 
 export const deleteAuction = async (auctionId) => {
   try {
-    return await api.delete(`/auction/${auctionId}`);
+    return await api.delete(`${API_URL}/auction/${auctionId}`);
   } catch (error) {
     console.error('Delete auction error:', error);
     throw error;
@@ -293,7 +293,7 @@ export const getAuctionComprehensiveData = async (auctionId) => {
 export const getTopBidders = async (auctionId) => {
   try {
     const token = localStorage.getItem('token');
-    const response = await fetch(`/auction/${auctionId}/top-bidders`, {
+    const response = await fetch(`${API_URL}/auction/${auctionId}/top-bidders`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -324,7 +324,7 @@ export const getTopBidders = async (auctionId) => {
  */
 export const awardBidder = async (auctionId, bidderId) => {
   try {
-    const response = await fetch(`/auction/${auctionId}/award/${bidderId}`, {
+    const response = await fetch(`${API_URL}/auction/${auctionId}/award/${bidderId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -350,7 +350,7 @@ export const awardBidder = async (auctionId, bidderId) => {
  */
 export const disqualifyBidder = async (auctionId, bidderId, reason) => {
   try {
-    const response = await fetch(`/auction/${auctionId}/disqualify/${bidderId}`, {
+    const response = await fetch(`${API_URL}/auction/${auctionId}/disqualify/${bidderId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -377,7 +377,7 @@ export const disqualifyBidder = async (auctionId, bidderId, reason) => {
  */
 export const getAllAuctionBids = async (auctionId) => {
   try {
-    const response = await fetch(`/auction/${auctionId}/all-bids`, {
+    const response = await fetch(`${API_URL}/auction/${auctionId}/all-bids`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
