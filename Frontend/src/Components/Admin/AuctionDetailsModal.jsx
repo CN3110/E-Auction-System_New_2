@@ -565,15 +565,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                   )}
                 </div>
 
-                {/* Add Bid Records Button in Details Tab */}
-                <div className="details-actions">
-                  <button
-                    className="btn btn-bid-records"
-                    onClick={handleViewBidRecords}
-                  >
-                    📋 View All Bid Records
-                  </button>
-                </div>
+               
               </div>
             )}
 
@@ -589,12 +581,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                         0}{" "}
                       bidders invited
                     </span>
-                    <button
-                      className="btn btn-bid-records btn-small"
-                      onClick={handleViewBidRecords}
-                    >
-                      📋 View Bid Records
-                    </button>
+                    
                   </div>
                 </div>
 
