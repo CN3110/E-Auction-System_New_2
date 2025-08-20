@@ -1604,3 +1604,9 @@
   border-radius: 4px;
   margin-bottom: 1rem;
 }
+
+/* for bid records modal not showing */
+/* In your CSS file */
+.high-z-index {
+  z-index: 1002 !important;
+}

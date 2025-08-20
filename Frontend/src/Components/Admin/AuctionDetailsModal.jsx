@@ -1,7 +1,7 @@
+
 import React, { useState, useEffect } from "react";
 import {
   getAuctionDetails,
-  getAuctionRankings,
   approveAuction,
   rejectAuction,
 } from "../../services/auctionService";
@@ -11,7 +11,6 @@ import "../../styles/AuctionDetailsModal.css";
 const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
   // State management
   const [auctionDetails, setAuctionDetails] = useState(null);
-  const [rankings, setRankings] = useState([]);
   const [topBidders, setTopBidders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -20,13 +19,13 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   
-  // New states for award/disqualify functionality
+  // States for award/disqualify functionality
   const [showDisqualifyModal, setShowDisqualifyModal] = useState(false);
   const [disqualifyReason, setDisqualifyReason] = useState("");
   const [selectedBidder, setSelectedBidder] = useState(null);
   const [awardActionLoading, setAwardActionLoading] = useState({});
   
-  // New state for bid records modal
+  // State for bid records modal
   const [showBidRecordsModal, setShowBidRecordsModal] = useState(false);
 
   // Fetch detailed auction information on component mount
@@ -63,25 +62,31 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       console.log("Fetching top bidders for:", identifier);
 
-      const response = await fetch(`/api/auctions/${identifier}/top-bidders`, {
+      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/top-bidders`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json',
         },
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const result = await response.json();
+      console.log('Top bidders response:', result);
       
       if (result.success) {
         setTopBidders(result.topBidders || []);
+        console.log('Top bidders set:', result.topBidders);
       } else {
         console.error('Failed to fetch top bidders:', result.error);
-        // Don't set error here as it might be expected (no bidders yet)
         setTopBidders([]);
       }
     } catch (err) {
       console.error('Fetch top bidders error:', err);
       setTopBidders([]);
+      // Don't set main error state for this as it might be expected (no bidders yet)
     }
   };
 
@@ -103,7 +108,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       
       console.log('Awarding bidder:', bidderUserId, 'for auction:', identifier);
       
-      const response = await fetch(`http://localhost:5000/api/auctions/${identifier}/award/${bidderUserId}`, {
+      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/award/${bidderUserId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -111,7 +116,12 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
         },
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const result = await response.json();
+      console.log('Award response:', result);
       
       if (result.success) {
         alert(`${bidderName} has been awarded the auction successfully!`);
@@ -148,7 +158,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       
       console.log('Disqualifying bidder:', bidderUserId, 'for auction:', identifier, 'Reason:', disqualifyReason);
       
-      const response = await fetch(`/api/auctions/${identifier}/disqualify/${bidderUserId}`, {
+      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/disqualify/${bidderUserId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -157,7 +167,12 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
         body: JSON.stringify({ reason: disqualifyReason }),
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const result = await response.json();
+      console.log('Disqualify response:', result);
       
       if (result.success) {
         alert(`${selectedBidder.bidder_name} has been disqualified successfully!`);
@@ -195,7 +210,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
   };
 
   /**
-   * Fetch detailed auction information including invited bidders and bidding data
+   * Fetch detailed auction information including invited bidders
    */
   const fetchAuctionDetails = async () => {
     try {
@@ -206,45 +221,26 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       console.log("Fetching details for:", identifier);
 
-      const [detailsResponse, rankingsResponse] = await Promise.allSettled([
-        getAuctionDetails(identifier),
-        getAuctionRankings(identifier),
-      ]);
+      const detailsResponse = await getAuctionDetails(identifier);
 
       let details = null;
-      let rankings = [];
 
       // Handle details response
-      if (detailsResponse.status === "fulfilled") {
-        if (detailsResponse.value?.success) {
-          details = {
-            ...detailsResponse.value.auction,
-            // Ensure backward compatibility
-            InvitedBidders:
-              detailsResponse.value.auction.auction_bidders
-                ?.map((b) => b.name)
-                .join(", ") || "No bidders invited",
-          };
-        } else {
-          throw new Error(
-            detailsResponse.value?.error || "Invalid auction data"
-          );
-        }
+      if (detailsResponse?.success) {
+        details = {
+          ...detailsResponse.auction,
+          // Ensure backward compatibility
+          InvitedBidders:
+            detailsResponse.auction.auction_bidders
+              ?.map((b) => b.name)
+              .join(", ") || "No bidders invited",
+        };
       } else {
-        throw detailsResponse.reason;
-      }
-
-      // Handle rankings response
-      if (
-        rankingsResponse.status === "fulfilled" &&
-        rankingsResponse.value?.success
-      ) {
-        rankings = rankingsResponse.value.rankings || [];
+        throw new Error(detailsResponse?.error || "Invalid auction data");
       }
 
       console.log("Fetched details:", details);
       setAuctionDetails(details);
-      setRankings(rankings);
     } catch (err) {
       console.error("Fetch error:", err);
       setError(err.message || "Failed to load auction details");
@@ -477,10 +473,10 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
               Invited Bidders
             </button>
             <button
-              className={`tab-button ${activeTab === "rankings" ? "active" : ""}`}
-              onClick={() => setActiveTab("rankings")}
+              className={`tab-button ${activeTab === "topbidders" ? "active" : ""}`}
+              onClick={() => setActiveTab("topbidders")}
             >
-              Bidding Reports
+              Top 5 Bidders
             </button>
           </div>
 
@@ -628,14 +624,14 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                             <td>
                               <span
                                 className={`status-badge ${
-                                  rankings.some(
+                                  topBidders.some(
                                     (r) => r.bidder_id === bidder.bidder_id
                                   )
                                     ? "status-participated"
                                     : "status-pending"
                                 }`}
                               >
-                                {rankings.some(
+                                {topBidders.some(
                                   (r) => r.bidder_id === bidder.bidder_id
                                 )
                                   ? "PARTICIPATED"
@@ -657,21 +653,15 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
               </div>
             )}
 
-            {/* Bidding Reports Tab - Enhanced with Top 5 Bidders */}
-            {activeTab === "rankings" && (
-              <div className="rankings-section">
+            {/* Top 5 Bidders Tab */}
+            {activeTab === "topbidders" && (
+              <div className="top-bidders-section">
                 <div className="section-header">
-                  <h3>Bidding Reports & Rankings</h3>
+                  <h3>🏆 Top 5 Bidders</h3>
                   <div className="section-actions">
                     <span className="participation-count">
                       {topBidders.length} top bidders
                     </span>
-                    <button
-                      className="btn btn-bid-records btn-small"
-                      onClick={handleViewBidRecords}
-                    >
-                      📋 View All Bid Records
-                    </button>
                     <button
                       className="btn btn-refresh btn-small"
                       onClick={fetchTopBidders}
@@ -682,179 +672,111 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                 </div>
 
                 {topBidders.length > 0 ? (
-                  <div className="rankings-container">
-                    {/* Top 5 Bidders Table */}
-                    <div className="top-bidders-section">
-                      <h4>🏆 Top 5 Bidders (Reverse Auction - Lowest First)</h4>
-                      <div className="top-bidders-table-container">
-                        <table className="top-bidders-table">
-                          <thead>
-                            <tr>
-                              <th>Rank</th>
-                              <th>Bidder ID</th>
-                              <th>Bidder Name</th>
-                              <th>Company</th>
-                              <th>Latest Bid Amount</th>
-                              <th>Status</th>
-                              {isSystemAdmin() && <th>Actions</th>}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {topBidders.map((bidder, index) => (
-                              <tr
-                                key={bidder.bidder_id}
-                                className={`bidder-row ${
-                                  bidder.result_status === 'awarded' ? 'awarded-row' : 
-                                  bidder.result_status === 'disqualified' ? 'disqualified-row' : 
-                                  bidder.result_status === 'not_awarded' ? 'not-awarded-row' : ''
-                                }`}
-                              >
-                                <td className="rank-cell">
-                                  <span className={`rank-badge ${index === 0 ? "rank-winner" : ""}`}>
-                                    {index === 0 ? "🥇" : `#${index + 1}`}
-                                  </span>
-                                </td>
-                                <td className="bidder-id">
-                                  {bidder.bidder_user_id || bidder.bidder_id}
-                                </td>
-                                <td className="bidder-name">{bidder.bidder_name}</td>
-                                <td className="bidder-company">
-                                  {bidder.company_name || "Not specified"}
-                                </td>
-                                <td className="bid-amount">
-                                  <span className={index === 0 ? "winning-amount" : "regular-amount"}>
-                                    {formatCurrency(bidder.latest_bid_amount)}
-                                  </span>
-                                </td>
-                                <td>
-                                  <span className={getStatusBadgeClass(bidder.result_status || 'pending')}>
-                                    {bidder.result_status ? 
-                                      bidder.result_status.toUpperCase().replace('_', ' ') : 
-                                      'PENDING'
-                                    }
-                                  </span>
-                                </td>
-                                {isSystemAdmin() && (
-                                  <td className="actions-cell">
-                                    {!bidder.result_status || bidder.result_status === 'pending' ? (
-                                      <div className="action-buttons">
-                                        <button
-                                          className="btn btn-award btn-small"
-                                          onClick={() => handleAwardBidder(bidder.bidder_id, bidder.bidder_name)}
-                                          disabled={awardActionLoading[bidder.bidder_id]}
-                                          title="Award this bidder"
-                                        >
-                                          {awardActionLoading[bidder.bidder_id] ? '⏳' : '🏆'} Award
-                                        </button>
-                                        <button
-                                          className="btn btn-disqualify btn-small"
-                                          onClick={() => openDisqualifyModal(bidder)}
-                                          disabled={awardActionLoading[bidder.bidder_id]}
-                                          title="Disqualify this bidder"
-                                        >
-                                          ❌ Disqualify
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <div className="action-status">
-                                        {bidder.result_status === 'awarded' && (
-                                          <span className="status-text awarded-text">✅ Awarded</span>
-                                        )}
-                                        {bidder.result_status === 'not_awarded' && (
-                                          <span className="status-text not-awarded-text">➖ Not Awarded</span>
-                                        )}
-                                        {bidder.result_status === 'disqualified' && (
-                                          <span className="status-text disqualified-text">
-                                            🚫 Disqualified
-                                          </span>
-                                        )}
-                                      </div>
-                                    )}
-                                  </td>
-                                )}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                  <div className="top-bidders-container">
+                    <div className="top-bidders-explanation">
+                      <p className="explanation-text">
+                        <strong>Reverse Auction:</strong> Lowest bid wins. Rankings are sorted by lowest bid amount first.
+                      </p>
                     </div>
 
-                    {/* Original Rankings Section (if you want to keep it) */}
-                    {rankings.length > 0 && (
-                      <div className="all-rankings-section" style={{ marginTop: '2rem' }}>
-                        <h4>All Participants Rankings</h4>
-                        <div className="rankings-table-container">
-                          <table className="rankings-table">
-                            <thead>
-                              <tr>
-                                <th>Rank</th>
-                                <th>Bidder Name</th>
-                                <th>Company</th>
-                                <th>Best Bid Amount</th>
-                                <th>Bid Time</th>
-                                <th>Status</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rankings.map((bidder, index) => (
-                                <tr
-                                  key={bidder.bidder_id}
-                                  className={index === 0 ? "winner-row" : ""}
-                                >
-                                  <td className="rank-cell">
-                                    <span
-                                      className={`rank-badge ${
-                                        index === 0 ? "rank-winner" : ""
-                                      }`}
-                                    >
-                                      {index === 0 ? "🥇" : `#${index + 1}`}
-                                    </span>
-                                  </td>
-                                  <td className="bidder-name">{bidder.name}</td>
-                                  <td className="bidder-company">
-                                    {bidder.company || "Not specified"}
-                                  </td>
-                                  <td className="bid-amount">
-                                    <span
-                                      className={
-                                        index === 0
-                                          ? "winning-amount"
-                                          : "regular-amount"
-                                      }
-                                    >
-                                      {formatCurrency(bidder.amount)}
-                                    </span>
-                                  </td>
-                                  <td className="bid-time">
-                                    {new Date(bidder.bid_time).toLocaleString(
-                                      "en-GB"
-                                    )}
-                                  </td>
-                                  <td>
-                                    <span
-                                      className={`status-badge ${
-                                        index === 0
-                                          ? "status-winner"
-                                          : "status-participated"
-                                      }`}
-                                    >
-                                      {index === 0 ? "WINNER" : "PARTICIPANT"}
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
+                    <div className="top-bidders-table-container">
+                      <table className="top-bidders-table">
+                        <thead>
+                          <tr>
+                            <th>Rank</th>
+                            <th>Bidder ID</th>
+                            <th>Bidder Name</th>
+                            <th>Company</th>
+                            <th>Latest Bid Amount</th>
+                            <th>Status</th>
+                            {isSystemAdmin() && <th>Actions</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {topBidders.map((bidder, index) => (
+                            <tr
+                              key={bidder.bidder_id}
+                              className={`bidder-row ${
+                                bidder.result_status === 'awarded' ? 'awarded-row' : 
+                                bidder.result_status === 'disqualified' ? 'disqualified-row' : 
+                                bidder.result_status === 'not_awarded' ? 'not-awarded-row' : ''
+                              }`}
+                            >
+                              <td className="rank-cell">
+                                <span className={`rank-badge ${index === 0 ? "rank-winner" : ""}`}>
+                                  {index === 0 ? "🥇" : `#${index + 1}`}
+                                </span>
+                              </td>
+                              <td className="bidder-id">
+                                {bidder.bidder_user_id || bidder.bidder_id}
+                              </td>
+                              <td className="bidder-name">{bidder.bidder_name}</td>
+                              <td className="bidder-company">
+                                {bidder.company_name || "Not specified"}
+                              </td>
+                              <td className="bid-amount">
+                                <span className={index === 0 ? "winning-amount" : "regular-amount"}>
+                                  {formatCurrency(bidder.latest_bid_amount)}
+                                </span>
+                              </td>
+                              <td>
+                                <span className={getStatusBadgeClass(bidder.result_status || 'pending')}>
+                                  {bidder.result_status ? 
+                                    bidder.result_status.toUpperCase().replace('_', ' ') : 
+                                    'PENDING'
+                                  }
+                                </span>
+                              </td>
+                              {isSystemAdmin() && (
+                                <td className="actions-cell">
+                                  {!bidder.result_status || bidder.result_status === 'pending' ? (
+                                    <div className="action-buttons">
+                                      <button
+                                        className="btn btn-award btn-small"
+                                        onClick={() => handleAwardBidder(bidder.bidder_id, bidder.bidder_name)}
+                                        disabled={awardActionLoading[bidder.bidder_id]}
+                                        title="Award this bidder"
+                                      >
+                                        {awardActionLoading[bidder.bidder_id] ? '⏳' : '🏆'} Award
+                                      </button>
+                                      <button
+                                        className="btn btn-disqualify btn-small"
+                                        onClick={() => openDisqualifyModal(bidder)}
+                                        disabled={awardActionLoading[bidder.bidder_id]}
+                                        title="Disqualify this bidder"
+                                      >
+                                        ❌ Disqualify
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="action-status">
+                                      {bidder.result_status === 'awarded' && (
+                                        <span className="status-text awarded-text">✅ Awarded</span>
+                                      )}
+                                      {bidder.result_status === 'not_awarded' && (
+                                        <span className="status-text not-awarded-text">➖ Not Awarded</span>
+                                      )}
+                                      {bidder.result_status === 'disqualified' && (
+                                        <span className="status-text disqualified-text">
+                                          🚫 Disqualified
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
 
-                    {/* Bidding Statistics */}
-                    <div className="bidding-statistics">
-                      <h4>Bidding Statistics</h4>
+                    {/* Top Bidders Statistics */}
+                    <div className="top-bidders-statistics">
+                      <h4>Top Bidders Statistics</h4>
                       <div className="stats-grid">
                         <div className="stat-item">
-                          <label>Total Participants:</label>
+                          <label>Total Top Bidders:</label>
                           <span>{topBidders.length}</span>
                         </div>
                         <div className="stat-item">
@@ -888,13 +810,13 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                         </div>
                         <div className="stat-item">
                           <label>Awarded Bidders:</label>
-                          <span>
+                          <span className="awarded-count">
                             {topBidders.filter(b => b.result_status === 'awarded').length}
                           </span>
                         </div>
                         <div className="stat-item">
                           <label>Disqualified Bidders:</label>
-                          <span>
+                          <span className="disqualified-count">
                             {topBidders.filter(b => b.result_status === 'disqualified').length}
                           </span>
                         </div>
@@ -902,14 +824,14 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                     </div>
                   </div>
                 ) : (
-                  <div className="no-bidding-data">
+                  <div className="no-top-bidders-data">
                     <div className="no-data-icon">📊</div>
-                    <h4>No Bidding Data Available</h4>
+                    <h4>No Top Bidders Data Available</h4>
                     <p>
                       {currentStatus === "pending"
                         ? "Auction has not been approved yet"
                         : currentStatus === "approved"
-                        ? "Auction has not started yet"
+                        ? "Auction has not started yet or no bids have been placed"
                         : currentStatus === "live"
                         ? "Auction is currently live - refresh to see latest bids"
                         : "No bids were placed in this auction"}
@@ -917,10 +839,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                     {currentStatus === "live" && (
                       <button
                         className="btn btn-refresh"
-                        onClick={() => {
-                          fetchAuctionDetails();
-                          fetchTopBidders();
-                        }}
+                        onClick={fetchTopBidders}
                       >
                         Refresh Data
                       </button>
@@ -930,6 +849,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
               </div>
             )}
           </div>
+
 
           {/* Modal Footer */}
           <div className="modal-footer">
