@@ -30,7 +30,8 @@ const {
   awardBidder, 
   disqualifyBidder,  
   getAllAuctionBids, 
-  getTopBidders
+  getTopBidders,
+  getAuctionResultsOverview
 } = require('../Controllers/results');
 
 // Import middleware
@@ -110,12 +111,7 @@ router.post('/:auctionId/disqualify/:bidderId', authenticateToken, requireSystem
 router.get('/:auctionId/all-bids', authenticateToken, getAllAuctionBids);
 
 
-// ===== Quotation Management Endpoints =====
-
-// Upload quotation (bidders only)
-//router.post('/auction/:auctionId/quotation', authenticateToken, upload.single('quotation'), uploadQuotation);
-
-// Download quotation (admin only)
-//router.get('/auction/:auctionId/quotation/:bidderId', authenticateToken, downloadQuotation);
+// Get auction results overview for admin dashboard
+router.get('/results/overview', authenticateToken, requireAdminOrSystemAdmin, getAuctionResultsOverview);
 
 module.exports = router;

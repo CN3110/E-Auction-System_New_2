@@ -224,9 +224,57 @@ const getTopBidders = async (req, res) => {
   }
 };
 
+
+// ✅ Get Auction Results Overview for Admin Dashboard (UPDATED)
+const getAuctionResultsOverview = async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT 
+        a.auction_id AS "Auction ID",
+        a.title AS "Title",
+        u.id AS "Winning Bidder ID",
+        u.name AS "Bidder Name",
+        u.user_id AS "Bidder User ID",
+        u.company AS "Company",
+        -- Get the latest bid amount regardless of is_winning flag
+        (SELECT amount FROM bids 
+         WHERE auction_id = a.id AND bidder_id = u.id 
+         ORDER BY bid_time DESC LIMIT 1) AS "Winning Bidding Price",
+        ar.status AS "Award Status",
+        ar.quotation_uploaded_at AS "Quotation Uploaded",
+        a.auction_date AS "Auction Date",
+        a.status AS "Auction Status"
+      FROM auction_results ar
+      INNER JOIN auctions a ON ar.auction_id = a.id
+      INNER JOIN users u ON ar.bidder_id = u.id
+      WHERE ar.status = 'awarded'
+      ORDER BY a.auction_date DESC, a.created_at DESC
+    `);
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    res.json({
+      success: true,
+      auctionResults: result.data,
+      totalResults: result.data.length
+    });
+
+  } catch (error) {
+    console.error('Get auction results overview error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+};
+
+
 module.exports = {
   awardBidder,
   disqualifyBidder,
   getAllAuctionBids,
-  getTopBidders
+  getTopBidders,
+  getAuctionResultsOverview
 };
