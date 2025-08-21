@@ -274,24 +274,10 @@ const ViewAuctions = () => {
       <div className="view-auctions-header">
         <h2>
           View Auctions
-          {isSystemAdmin() && (
-            <span className="role-indicator"> (System Administrator)</span>
-          )}
-          {isRegularAdmin() && (
-            <span className="role-indicator"> (Administrator)</span>
-          )}
+         
         </h2>
-        <div className="user-info">
-          <span className="welcome-text">Welcome, {currentUser.name}</span>
-          <span className="user-role">Role: {currentUser.role}</span>
-        </div>
-        <button 
-          className="btn btn-refresh"
-          onClick={fetchAuctions}
-          disabled={loading}
-        >
-          {loading ? 'Refreshing...' : 'Refresh'}
-        </button>
+        
+        
       </div>
 
       {/* Filter Section */}

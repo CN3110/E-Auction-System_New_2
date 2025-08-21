@@ -61,7 +61,7 @@ const Login = ({ onLogin }) => {
       // Show success message with role information
       setAlert({
         show: true,
-        message: `Welcome ${data.user.name}! (${data.user.role}) Redirecting...`,
+        message: `Welcome ${data.user.name}!) Redirecting...`,
         type: 'success'
       });
 
@@ -100,13 +100,11 @@ const Login = ({ onLogin }) => {
                 type="text" 
                 value={credentials.userId}
                 onChange={(e) => handleInputChange('userId', e.target.value)}
-                placeholder="Enter your User ID (ADMIN, SYSADMIN, or BXXXX)" 
+                placeholder="Enter your User ID" 
                 required 
                 maxLength={10}
               />
-              <small className="input-help">
-                Use ADMIN for Administrator, SYSADMIN for System Administrator, or your bidder ID (e.g., B001)
-              </small>
+              
             </div>
             <div className="form-group">
               <label>Password</label>

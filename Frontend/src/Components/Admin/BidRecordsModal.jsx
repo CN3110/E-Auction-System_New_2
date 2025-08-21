@@ -371,16 +371,7 @@ const BidRecordsModal = ({ auction, onClose }) => {
 
         {/* Records Summary */}
         <div className="records-summary">
-          <div className="summary-stats">
-            <div className="stat-item">
-              <label>Total Records:</label>
-              <span className="stat-value">{bidRecords.length}</span>
-            </div>
-            <div className="stat-item">
-              <label>Filtered Records:</label>
-              <span className="stat-value">{filteredBids.length}</span>
-            </div>
-          </div>
+          
           
           <div className="action-buttons">
             <button className="btn btn-export" onClick={exportToExcel}>

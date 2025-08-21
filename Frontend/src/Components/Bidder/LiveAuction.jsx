@@ -525,56 +525,10 @@ const LiveAuction = () => {
             <p><strong>Auction ID:</strong> {auction.auction_id}</p>
             <p><strong>Category:</strong> {auction.category}</p>
             <p><strong>SBU:</strong> {auction.sbu}</p>
-            
-            <div className="time-details border-top pt-3 mt-3">
-              <h6 className="text-muted">Time Details (Sri Lanka Time)</h6>
-              <p className="mb-2">
-                <strong>Start Date/Time:</strong> 
-                <br />
-                <span className="text-success">
-                  {auctionStart ? formatToSLTime(auctionStart) : 'Invalid date'}
-                </span>
-              </p>
-              
-              <p className="mb-2">
-                <strong>End Date/Time:</strong> 
-                <br />
-                <span className="text-danger">
-                  {auctionEnd ? formatToSLTime(auctionEnd) : 'Invalid date'}
-                </span>
-              </p>
-              
-              <p className="mb-2">
-                <strong>Duration:</strong> {auction.duration_minutes} minutes
-              </p>
-              
-              {auction.time_until_end && auction.time_until_end !== 'Invalid date' && (
-                <p className="mb-2">
-                  <strong>Time Until End:</strong> 
-                  <span className="text-warning ms-2">{auction.time_until_end}</span>
-                </p>
-              )}
-            </div>
-            
-            <div className="status-info border-top pt-3 mt-3">
-              <p className="mb-2">
-                <strong>Status:</strong> 
-                <span className={`badge ms-2 ${
-                  auctionStatus === 'live' ? 'bg-success' : 
-                  auctionStatus === 'approved' ? 'bg-info' : 'bg-secondary'
-                }`}>
-                  {auctionStatus.toUpperCase()}
-                </span>
-              </p>
-              
-              <p className="mb-2">
-                <strong>Live Status:</strong> 
-                <span className={`badge ms-2 ${auction.is_live ? 'bg-success' : 'bg-secondary'}`}>
-                  {auction.is_live ? 'ACTIVE' : 'INACTIVE'}
-                </span>
-              </p>
-            </div>
-            
+            <p><strong>Start Date/Time:</strong>{auctionStart ? formatToSLTime(auctionStart) : 'Invalid date'}</p>
+            <p><strong>End Date/Time:</strong>{auctionEnd ? formatToSLTime(auctionEnd) : 'Invalid date'}</p>
+            <p><strong>Duration:</strong> {auction.duration_minutes} minutes</p>  
+            <p><strong>Time Until End:</strong>{auction.time_until_end}</p> 
             {auction.special_notices && (
               <div className="mt-3">
                 <strong>Special Notices:</strong>
