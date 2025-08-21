@@ -421,9 +421,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
           <div className="modal-header">
             <div className="header-content">
               <h2>Auction Details</h2>
-              {isSystemAdmin() && (
-                <span className="admin-badge">System Administrator</span>
-              )}
+              
             </div>
             <button className="close-button" onClick={onClose}>
               ×
