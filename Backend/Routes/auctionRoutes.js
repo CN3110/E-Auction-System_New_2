@@ -31,7 +31,8 @@ const {
   disqualifyBidder,  
   getAllAuctionBids, 
   getTopBidders,
-  getAuctionResultsOverview
+  getAuctionResultsOverview,
+  getBidderAuctionResults
 } = require('../Controllers/results');
 
 // Import middleware
@@ -113,5 +114,8 @@ router.get('/:auctionId/all-bids', authenticateToken, getAllAuctionBids);
 
 // Get auction results overview for admin dashboard
 router.get('/results/overview', authenticateToken, requireAdminOrSystemAdmin, getAuctionResultsOverview);
+
+// Get bidder's auction results
+router.get('/results/bidder/:bidderId', authenticateToken, requireBidder, getBidderAuctionResults);
 
 module.exports = router;

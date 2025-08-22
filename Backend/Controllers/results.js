@@ -270,11 +270,99 @@ const getAuctionResultsOverview = async (req, res) => {
   }
 };
 
+// ✅ Get Auction Results for Logged-in Bidder
+const getBidderAuctionResults = async (req, res) => {
+  try {
+    const bidderId = req.user.id; // Assuming user ID is available from auth middleware
+    
+    const result = await db.query(`
+      SELECT 
+        a.auction_id AS "Auction ID",
+        a.title AS "Title",
+        MAX(b.amount) AS "Bid Amount",
+        ar.status AS "Result",
+        CONCAT(a.auction_date, ' ', a.start_time) AS "Date Time",
+        a.auction_date AS "Auction Date",
+        a.start_time AS "Start Time",
+        ar.disqualification_reason AS "Disqualification Reason",
+        ar.quotation_uploaded_at AS "Quotation Uploaded",
+        ar.updated_at AS "Result Updated"
+      FROM auction_results ar
+      INNER JOIN auctions a ON ar.auction_id = a.id
+      INNER JOIN bids b ON b.auction_id = a.id AND b.bidder_id = ar.bidder_id
+      WHERE ar.bidder_id = ?
+      GROUP BY a.auction_id, a.title, ar.status, a.auction_date, a.start_time, 
+               ar.disqualification_reason, ar.quotation_uploaded_at, ar.updated_at
+      ORDER BY a.auction_date DESC, a.start_time DESC
+    `, [bidderId]);
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    // Format the results for better display
+    const formattedResults = result.data.map(item => ({
+      "Auction ID": item["Auction ID"],
+      "Title": item["Title"],
+      "Bid Amount": item["Bid Amount"],
+      "Result": formatResultStatus(item["Result"]),
+      "Date Time": formatDateTime(item["Auction Date"], item["Start Time"]),
+      "Raw Status": item["Result"], // Keep original for filtering/sorting
+      "Disqualification Reason": item["Disqualification Reason"],
+      "Quotation Uploaded": item["Quotation Uploaded"]
+    }));
+
+    res.json({
+      success: true,
+      auctionResults: formattedResults,
+      totalResults: formattedResults.length
+    });
+
+  } catch (error) {
+    console.error('Get bidder auction results error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+};
+
+// Helper function to format result status for display
+const formatResultStatus = (status) => {
+  const statusMap = {
+    'pending': 'Pending Review',
+    'awarded': 'Awarded 🎉',
+    'not_awarded': 'Not Awarded',
+    'disqualified': 'Disqualified ❌'
+  };
+  return statusMap[status] || status;
+};
+
+// Helper function to format date and time
+const formatDateTime = (date, time) => {
+  const dateObj = new Date(date);
+  const timeObj = new Date(`1970-01-01T${time}`);
+  
+  return `${dateObj.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })} ${timeObj.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  })}`;
+};
+
+
 
 module.exports = {
   awardBidder,
   disqualifyBidder,
   getAllAuctionBids,
   getTopBidders,
-  getAuctionResultsOverview
+  getAuctionResultsOverview,
+  getBidderAuctionResults,
+  formatResultStatus,
+  formatDateTime
 };

@@ -5,15 +5,11 @@ const AuctionHistory = () => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    limit: 10
-  });
   const [summary, setSummary] = useState(null);
 
   // Format currency
   const formatCurrency = (amount) => {
+    if (!amount) return 'N/A';
     return new Intl.NumberFormat('en-LK', {
       style: 'currency',
       currency: 'LKR',
@@ -21,47 +17,35 @@ const AuctionHistory = () => {
     }).format(amount);
   };
 
-  // Format date and time in one column
-  const formatDateTime = (dateTimeString) => {
-    try {
-      const dateTime = new Date(dateTimeString);
-      const date = dateTime.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-      const time = dateTime.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-      return `${date} ${time}`;
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return 'Invalid date';
-    }
-  };
-
-  // Get result badge class
-  const getResultBadgeClass = (result) => {
-    switch (result?.toLowerCase()) {
-      case 'won':
+  // Get result badge class based on auction_results status
+  const getResultBadgeClass = (resultStatus) => {
+    switch (resultStatus?.toLowerCase()) {
+      case 'awarded':
         return 'bg-success';
-      case 'lost':
+      case 'disqualified':
         return 'bg-danger';
-      case 'in progress':
-        return 'bg-primary';
+      case 'not_awarded':
+        return 'bg-secondary';
       case 'pending':
         return 'bg-warning';
-      case 'cancelled':
-        return 'bg-secondary';
       default:
         return 'bg-secondary';
     }
   };
 
+  // Format result status for display
+  const formatResultStatus = (resultStatus) => {
+    const statusMap = {
+      'awarded': 'Awarded 🎉',
+      'disqualified': 'Disqualified ❌',
+      'not_awarded': 'Not Awarded',
+      'pending': 'Pending Review'
+    };
+    return statusMap[resultStatus] || resultStatus;
+  };
+
   // Fetch auction history from backend
-  const fetchAuctionHistory = useCallback(async (page = 1) => {
+  const fetchAuctionHistory = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -71,8 +55,9 @@ const AuctionHistory = () => {
         throw new Error('Authentication token not found');
       }
 
+      // FIXED: Use the correct endpoint without bidderId parameter
       const response = await fetch(
-        `http://localhost:5000/api/bid/history?page=${page}&limit=${pagination.limit}`,
+        `http://localhost:5000/api/auction/results/bidder/results`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -83,62 +68,66 @@ const AuctionHistory = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch auction history');
+        throw new Error(errorData.error || 'Failed to fetch auction results');
       }
 
       const data = await response.json();
       
       if (data.success) {
-        setHistory(data.history || []);
-        setSummary(data.summary || null);
+        // Map the API response to match your table structure
+        const formattedHistory = data.auctionResults.map(item => ({
+          auction_id: item["Auction ID"],
+          title: item["Title"],
+          bid_amount: item["Bid Amount"],
+          result: item["Result"],
+          raw_status: item["Raw Status"],
+          date_time: item["Date Time"],
+          disqualification_reason: item["Disqualification Reason"]
+        }));
         
-        // Update pagination if backend provides it
-        if (data.pagination) {
-          setPagination(prev => ({
-            ...prev,
-            currentPage: data.pagination.currentPage,
-            totalPages: data.pagination.totalPages
-          }));
-        }
+        setHistory(formattedHistory);
+        
+        // Calculate summary from the data
+        const auctionsWon = formattedHistory.filter(item => item.raw_status === 'awarded').length;
+        const totalAuctions = formattedHistory.length;
+        
+        setSummary({
+          total_auctions_participated: totalAuctions,
+          auctions_won: auctionsWon,
+          win_rate: totalAuctions > 0 ? Math.round((auctionsWon / totalAuctions) * 100) : 0
+        });
+
       } else {
-        throw new Error(data.error || 'Failed to fetch auction history');
+        throw new Error(data.message || 'Failed to fetch auction results');
       }
 
     } catch (err) {
-      console.error('Error fetching auction history:', err);
+      console.error('Error fetching auction results:', err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [pagination.limit]);
+  }, []);
 
   // Initial load
   useEffect(() => {
-    fetchAuctionHistory(1);
-  }, []);
-
-  // Handle page change
-  const handlePageChange = (newPage) => {
-    if (newPage >= 1 && newPage <= pagination.totalPages) {
-      setPagination(prev => ({ ...prev, currentPage: newPage }));
-      fetchAuctionHistory(newPage);
-    }
-  };
+    fetchAuctionHistory();
+  }, [fetchAuctionHistory]);
 
   // Refresh data
   const handleRefresh = () => {
-    fetchAuctionHistory(pagination.currentPage);
+    fetchAuctionHistory();
   };
 
   if (loading && history.length === 0) {
     return (
       <div className="auction-history">
-        <h4 className="mb-3">Your Auction History</h4>
+        <h4 className="mb-3">Your Auction Results</h4>
         <div className="text-center p-4">
           <div className="spinner-border" role="status">
             <span className="visually-hidden">Loading...</span>
           </div>
-          <p className="mt-2">Loading your auction history...</p>
+          <p className="mt-2">Loading your auction results...</p>
         </div>
       </div>
     );
@@ -147,9 +136,9 @@ const AuctionHistory = () => {
   if (error) {
     return (
       <div className="auction-history">
-        <h4 className="mb-3">Your Auction History</h4>
+        <h4 className="mb-3">Your Auction Results</h4>
         <Alert 
-          message={`Error loading auction history: ${error}`} 
+          message={`Error loading auction results: ${error}`} 
           type="danger" 
         />
         <button 
@@ -167,10 +156,10 @@ const AuctionHistory = () => {
     <div className="auction-history">
       <div className="d-flex justify-content-between align-items-center mb-3">
         <div>
-          <h4 className="mb-0">Your Auction History</h4>
+          <h4 className="mb-0">Your Auction Results</h4>
           {summary && (
             <small className="text-muted">
-              {summary.total_auctions_participated} auctions • {summary.auctions_won} won • {summary.total_bids_placed} total bids
+              {summary.total_auctions_participated} auctions • {summary.auctions_won} awarded • {summary.win_rate}% success rate
             </small>
           )}
         </div>
@@ -198,7 +187,7 @@ const AuctionHistory = () => {
           <div className="mb-3">
             <i className="fas fa-history fa-3x text-muted"></i>
           </div>
-          <h5 className="text-muted">No Auction History</h5>
+          <h5 className="text-muted">No Auction Results</h5>
           <p className="text-muted">
             You haven't participated in any auctions yet.
             <br />
@@ -222,35 +211,37 @@ const AuctionHistory = () => {
                 {history.map((item, index) => (
                   <tr key={`${item.auction_id}-${index}`}>
                     <td>
-                      <strong>{item.auctions?.auction_id || 'N/A'}</strong>
+                      <strong>{item.auction_id || 'N/A'}</strong>
                     </td>
                     <td>
-                      <div>
-                        {item.auctions?.title || 'Untitled Auction'}
-                      </div>
+                      <div className="fw-medium">{item.title || 'Untitled Auction'}</div>
                     </td>
                     <td>
                       <strong className="text-primary">
-                        {formatCurrency(item.amount)}
+                        {formatCurrency(item.bid_amount)}
                       </strong>
-                      <div>
-                        <small className="text-muted">Last bid</small>
-                      </div>
                     </td>
                     <td>
-                      <span className={`badge ${getResultBadgeClass(item.result)}`}>
-                        {item.result === 'Won' && <i className="fas fa-trophy me-1"></i>}
-                        {item.result === 'Lost' && <i className="fas fa-times me-1"></i>}
-                        {item.result === 'In Progress' && <i className="fas fa-clock me-1"></i>}
-                        {item.result === 'Pending' && <i className="fas fa-hourglass-half me-1"></i>}
-                        {item.result === 'Cancelled' && <i className="fas fa-ban me-1"></i>}
+                      <span className={`badge ${getResultBadgeClass(item.raw_status)}`}>
+                        {item.raw_status === 'awarded' && <i className="fas fa-trophy me-1"></i>}
+                        {item.raw_status === 'disqualified' && <i className="fas fa-times me-1"></i>}
+                        {item.raw_status === 'not_awarded' && <i className="fas fa-times-circle me-1"></i>}
+                        {item.raw_status === 'pending' && <i className="fas fa-clock me-1"></i>}
                         {item.result}
                       </span>
+                      {item.disqualification_reason && (
+                        <div className="mt-1">
+                          <small className="text-muted">
+                            <i className="fas fa-info-circle me-1"></i>
+                            {item.disqualification_reason}
+                          </small>
+                        </div>
+                      )}
                     </td>
                     <td>
-                      <div className="small">
-                        {formatDateTime(item.bid_time)}
-                      </div>
+                      <small className="text-muted">
+                        {item.date_time || 'Date not available'}
+                      </small>
                     </td>
                   </tr>
                 ))}
@@ -258,67 +249,13 @@ const AuctionHistory = () => {
             </table>
           </div>
 
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <nav aria-label="Auction history pagination">
-              <ul className="pagination justify-content-center">
-                <li className={`page-item ${pagination.currentPage === 1 ? 'disabled' : ''}`}>
-                  <button 
-                    className="page-link" 
-                    onClick={() => handlePageChange(pagination.currentPage - 1)}
-                    disabled={pagination.currentPage === 1 || loading}
-                  >
-                    Previous
-                  </button>
-                </li>
-                
-                {[...Array(pagination.totalPages)].map((_, index) => {
-                  const pageNumber = index + 1;
-                  return (
-                    <li 
-                      key={pageNumber} 
-                      className={`page-item ${pagination.currentPage === pageNumber ? 'active' : ''}`}
-                    >
-                      <button 
-                        className="page-link" 
-                        onClick={() => handlePageChange(pageNumber)}
-                        disabled={loading}
-                      >
-                        {pageNumber}
-                      </button>
-                    </li>
-                  );
-                })}
-                
-                <li className={`page-item ${pagination.currentPage === pagination.totalPages ? 'disabled' : ''}`}>
-                  <button 
-                    className="page-link" 
-                    onClick={() => handlePageChange(pagination.currentPage + 1)}
-                    disabled={pagination.currentPage === pagination.totalPages || loading}
-                  >
-                    Next
-                  </button>
-                </li>
-              </ul>
-            </nav>
-          )}
-
           {/* Summary info */}
           <div className="mt-3">
             <div className="row">
-              <div className="col-md-8">
+              <div className="col-md-12 text-center">
                 <small className="text-muted">
-                  Showing {history.length} auction{history.length !== 1 ? 's' : ''} 
-                  {pagination.totalPages > 1 && ` (Page ${pagination.currentPage} of ${pagination.totalPages})`}
+                  Showing {history.length} auction result{history.length !== 1 ? 's' : ''}
                 </small>
-              </div>
-              <div className="col-md-4 text-end">
-                {summary && (
-                  <small className="text-muted">
-                    Win Rate: {summary.auctions_completed > 0 ? 
-                      Math.round((summary.auctions_won / summary.auctions_completed) * 100) : 0}%
-                  </small>
-                )}
               </div>
             </div>
           </div>

@@ -131,52 +131,48 @@ const LiveRankings = () => {
     }
   }, []);
 
-  // Fetch overall results - CREATE A MOCK IMPLEMENTATION SINCE ENDPOINT DOESN'T EXIST
-  const fetchOverallResults = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      
-      // Since the results endpoint doesn't exist, let's fetch completed auctions from the main endpoint
-      const response = await fetch('http://localhost:5000/api/auction/all', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch auction results: ${response.status}`);
+// Fetch overall results - CORRECTED VERSION
+const fetchOverallResults = useCallback(async () => {
+  try {
+    const token = localStorage.getItem('token');
+    
+    const response = await fetch('http://localhost:5000/api/auction/results/overview', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
       }
+    });
 
-      const data = await response.json();
-      console.log('Overall results response:', data); // Debug log
-      
-      if (data.success && data.auctions) {
-        // Filter for completed auctions and format as results
-        const completedAuctions = data.auctions
-          .filter(auction => auction.status === 'completed' || auction.status === 'ended')
-          .map(auction => ({
-            auction_id: auction.auction_id,
-            title: auction.title,
-            auction_date: auction.auction_date,
-            status: auction.status,
-            winning_bidder_id: auction.winning_bidder_id || null,
-            bidder_name: auction.winning_bidder_name || null,
-            winning_price: auction.winning_price || null
-          }));
-          
-        setOverallResults(completedAuctions);
-        setError(null);
-      } else {
-        throw new Error(data.message || 'Failed to fetch auction results');
-      }
-    } catch (err) {
-      console.error('Error fetching overall results:', err);
-      setError(`Failed to fetch auction results: ${err.message}`);
-      // Set empty results on error instead of keeping old data
-      setOverallResults([]);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch auction results: ${response.status}`);
     }
-  }, []);
+
+    const data = await response.json();
+    console.log('Overall results response:', data);
+    
+    if (data.success && data.auctionResults) {
+      // Map the API response to match your table structure
+      const formattedResults = data.auctionResults.map(result => ({
+        auction_id: result["Auction ID"],
+        title: result["Title"],
+        winning_bidder_id: result["Bidder User ID"], // Show the user-friendly ID
+        bidder_name: result["Bidder Name"],
+        winning_price: result["Winning Bidding Price"],
+        auction_date: result["Auction Date"],
+        status: result["Award Status"]
+      }));
+      
+      setOverallResults(formattedResults);
+      setError(null);
+    } else {
+      throw new Error(data.message || 'No auction results found');
+    }
+  } catch (err) {
+    console.error('Error fetching overall results:', err);
+    setError(`Failed to fetch auction results: ${err.message}`);
+    setOverallResults([]);
+  }
+}, []);
 
   // Initial load
   useEffect(() => {
@@ -441,7 +437,8 @@ const LiveRankings = () => {
 
       {/* Overall Results Tab */}
       {activeTab === 'overallResults' && (
-        <Card title="Auction Results Overview">
+        <Card title="Overall Results Overview">
+          <br></br>
           <div className="table-responsive">
             <table className="table table-bordered table-striped">
               <thead className="table-dark">
@@ -451,8 +448,8 @@ const LiveRankings = () => {
                   <th>Winning Bidder ID</th>
                   <th>Bidder Name</th>
                   <th>Winning Bidding Price</th>
-                  <th>Auction Date</th>
-                  <th>Status</th>
+                  
+                  
                 </tr>
               </thead>
               <tbody>
@@ -478,25 +475,8 @@ const LiveRankings = () => {
                           <span className="text-muted">No Bids</span>
                         )}
                       </td>
-                      <td>
-                        <small>
-                          {new Date(result.auction_date).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </small>
-                      </td>
-                      <td>
-                        <span className={`badge ${
-                          result.status === 'completed' ? 'bg-success' : 
-                          result.status === 'cancelled' ? 'bg-danger' : 
-                          result.status === 'ended' ? 'bg-info' :
-                          'bg-warning'
-                        }`}>
-                          {result.status?.toUpperCase()}
-                        </span>
-                      </td>
+                      
+                      
                     </tr>
                   ))
                 ) : (
@@ -519,19 +499,7 @@ const LiveRankings = () => {
                   Showing {overallResults.length} auction result{overallResults.length !== 1 ? 's' : ''}
                 </small>
               </div>
-              <div className="col-md-6 text-end">
-                <button 
-                  className="btn btn-sm btn-outline-primary"
-                  onClick={() => {
-                    setLoading(true);
-                    fetchOverallResults().finally(() => setLoading(false));
-                  }}
-                  disabled={loading}
-                >
-                  <i className="fas fa-sync-alt me-1"></i>
-                  Refresh
-                </button>
-              </div>
+              
             </div>
           </div>
         </Card>
