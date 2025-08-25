@@ -398,6 +398,106 @@ export const getAllAuctionBids = async (auctionId) => {
   }
 };
 
+// Add these functions to your Frontend/src/services/auctionService.js
+
+/**
+ * Shortlist top 5 bidders for an auction
+ */
+export const shortlistTopBidders = async (auctionId) => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const response = await fetch(`${API_URL}/auction/${auctionId}/shortlist`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Shortlist bidders error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Mark bidder as not awarded
+ */
+export const markBidderNotAwarded = async (auctionId, bidderId) => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const response = await fetch(`${API_URL}/auction/${auctionId}/not-award/${bidderId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Mark not awarded error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Cancel auction
+ */
+export const cancelAuction = async (auctionId, reason) => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    if (!reason || reason.trim().length === 0) {
+      throw new Error('Cancellation reason is required');
+    }
+
+    const response = await fetch(`${API_URL}/auction/${auctionId}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ reason }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Cancel auction error:', error);
+    throw error;
+  }
+};
+
+
+  
+
 
 // Export methods for use in components
 export default {
@@ -414,4 +514,7 @@ export default {
   awardBidder,
   disqualifyBidder,
   getAllAuctionBids,
+  shortlistTopBidders,        // NEW
+  markBidderNotAwarded,       // NEW
+  cancelAuction,              // NEW
 };
