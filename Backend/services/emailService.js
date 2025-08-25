@@ -125,7 +125,7 @@ const emailTemplates = {
   },
   
   award: {
-    subject: '🏆 Congratulations! You won the auction {auctionId}',
+    subject: '🏆 Congratulations! You awarded the auction {auctionId}',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #4CAF50; color: white; padding: 20px; text-align: center;">
