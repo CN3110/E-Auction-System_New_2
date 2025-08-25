@@ -22,10 +22,17 @@ const AuctionHistory = () => {
     switch (resultStatus?.toLowerCase()) {
       case 'awarded':
         return 'bg-success';
+      case 'short-listed':
+        return 'bg-info';
+      case 'not-short-listed':
+        return 'bg-warning';
       case 'disqualified':
         return 'bg-danger';
       case 'not_awarded':
         return 'bg-secondary';
+      case 'cancel':
+      case 'cancelled':
+        return 'bg-dark';
       case 'pending':
         return 'bg-warning';
       default:
@@ -37,8 +44,12 @@ const AuctionHistory = () => {
   const formatResultStatus = (resultStatus) => {
     const statusMap = {
       'awarded': 'Awarded 🎉',
+      'short-listed': 'Short-Listed 📋',
+      'not-short-listed': 'Not Short-Listed',
       'disqualified': 'Disqualified ❌',
       'not_awarded': 'Not Awarded',
+      'cancel': 'Cancelled 🚫',
+      'cancelled': 'Cancelled 🚫',
       'pending': 'Pending Review'
     };
     return statusMap[resultStatus] || resultStatus;
@@ -55,7 +66,6 @@ const AuctionHistory = () => {
         throw new Error('Authentication token not found');
       }
 
-      // FIXED: Use the correct endpoint without bidderId parameter
       const response = await fetch(
         `http://localhost:5000/api/auction/results/bidder/results`,
         {
@@ -82,18 +92,22 @@ const AuctionHistory = () => {
           result: item["Result"],
           raw_status: item["Raw Status"],
           date_time: item["Date Time"],
-          disqualification_reason: item["Disqualification Reason"]
+          disqualification_reason: item["Disqualification Reason"],
+          cancel_reason: item["Cancel Reason"],
+          shortlisted_at: item["Shortlisted At"]
         }));
         
         setHistory(formattedHistory);
         
         // Calculate summary from the data
         const auctionsWon = formattedHistory.filter(item => item.raw_status === 'awarded').length;
+        const auctionsShortlisted = formattedHistory.filter(item => item.raw_status === 'short-listed').length;
         const totalAuctions = formattedHistory.length;
         
         setSummary({
           total_auctions_participated: totalAuctions,
           auctions_won: auctionsWon,
+          auctions_shortlisted: auctionsShortlisted,
           win_rate: totalAuctions > 0 ? Math.round((auctionsWon / totalAuctions) * 100) : 0
         });
 
@@ -159,7 +173,7 @@ const AuctionHistory = () => {
           <h4 className="mb-0">Your Auction Results</h4>
           {summary && (
             <small className="text-muted">
-              {summary.total_auctions_participated} auctions • {summary.auctions_won} awarded • {summary.win_rate}% success rate
+              {summary.total_auctions_participated} auctions • {summary.auctions_won} awarded • {summary.auctions_shortlisted} shortlisted • {summary.win_rate}% success rate
             </small>
           )}
         </div>
@@ -196,6 +210,44 @@ const AuctionHistory = () => {
         </div>
       ) : (
         <>
+          {/* Summary Cards */}
+          {summary && (
+            <div className="row mb-4">
+              <div className="col-md-3">
+                <div className="card text-center">
+                  <div className="card-body">
+                    <h5 className="card-title text-primary">{summary.total_auctions_participated}</h5>
+                    <p className="card-text small">Total Participated</p>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="card text-center">
+                  <div className="card-body">
+                    <h5 className="card-title text-success">{summary.auctions_won}</h5>
+                    <p className="card-text small">Awarded</p>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="card text-center">
+                  <div className="card-body">
+                    <h5 className="card-title text-info">{summary.auctions_shortlisted}</h5>
+                    <p className="card-text small">Shortlisted</p>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="card text-center">
+                  <div className="card-body">
+                    <h5 className="card-title text-warning">{summary.win_rate}%</h5>
+                    <p className="card-text small">Success Rate</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="table-responsive">
             <table className="table table-bordered table-striped table-hover">
               <thead className="table-dark">
@@ -205,6 +257,7 @@ const AuctionHistory = () => {
                   <th>Bid Amount</th>
                   <th>Result</th>
                   <th>Date Time</th>
+                  <th>Details</th>
                 </tr>
               </thead>
               <tbody>
@@ -224,24 +277,83 @@ const AuctionHistory = () => {
                     <td>
                       <span className={`badge ${getResultBadgeClass(item.raw_status)}`}>
                         {item.raw_status === 'awarded' && <i className="fas fa-trophy me-1"></i>}
+                        {item.raw_status === 'short-listed' && <i className="fas fa-list me-1"></i>}
+                        {item.raw_status === 'not-short-listed' && <i className="fas fa-times-circle me-1"></i>}
                         {item.raw_status === 'disqualified' && <i className="fas fa-times me-1"></i>}
                         {item.raw_status === 'not_awarded' && <i className="fas fa-times-circle me-1"></i>}
+                        {(item.raw_status === 'cancel' || item.raw_status === 'cancelled') && <i className="fas fa-ban me-1"></i>}
                         {item.raw_status === 'pending' && <i className="fas fa-clock me-1"></i>}
                         {item.result}
                       </span>
-                      {item.disqualification_reason && (
-                        <div className="mt-1">
-                          <small className="text-muted">
-                            <i className="fas fa-info-circle me-1"></i>
-                            {item.disqualification_reason}
-                          </small>
-                        </div>
-                      )}
                     </td>
                     <td>
                       <small className="text-muted">
                         {item.date_time || 'Date not available'}
                       </small>
+                      {item.shortlisted_at && (
+                        <div>
+                          <small className="text-info">
+                            <i className="fas fa-clock me-1"></i>
+                            Shortlisted: {new Date(item.shortlisted_at).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </small>
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <div className="d-flex flex-column gap-1">
+                        {/* Shortlist Notice */}
+                        {item.raw_status === 'short-listed' && (
+                          <div className="alert alert-info alert-sm p-1 mb-1">
+                            <small>
+                              <i className="fas fa-info-circle me-1"></i>
+                              <strong>Congratulations!</strong> You've been shortlisted. Please prepare your quotation.
+                            </small>
+                          </div>
+                        )}
+
+                        {/* Disqualification Reason */}
+                        {item.disqualification_reason && (
+                          <div className="alert alert-danger alert-sm p-1 mb-1">
+                            <small>
+                              <strong>Reason:</strong> {item.disqualification_reason}
+                            </small>
+                          </div>
+                        )}
+
+                        {/* Cancellation Reason */}
+                        {item.cancel_reason && (
+                          <div className="alert alert-warning alert-sm p-1 mb-1">
+                            <small>
+                              <strong>Cancelled:</strong> {item.cancel_reason}
+                            </small>
+                          </div>
+                        )}
+
+                        {/* Award Notice */}
+                        {item.raw_status === 'awarded' && (
+                          <div className="alert alert-success alert-sm p-1 mb-1">
+                            <small>
+                              <i className="fas fa-trophy me-1"></i>
+                              <strong>Congratulations!</strong> You won this auction. Our team will contact you soon.
+                            </small>
+                          </div>
+                        )}
+
+                        {/* Not Shortlisted Notice */}
+                        {item.raw_status === 'not-short-listed' && (
+                          <div className="alert alert-secondary alert-sm p-1 mb-1">
+                            <small>
+                              <i className="fas fa-info-circle me-1"></i>
+                              You were not selected for the shortlist this time.
+                            </small>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -249,7 +361,38 @@ const AuctionHistory = () => {
             </table>
           </div>
 
-          {/* Summary info */}
+          {/* Results Summary */}
+          <div className="mt-3">
+            <div className="row">
+              <div className="col-md-12">
+                <div className="alert alert-light">
+                  <div className="row text-center">
+                    <div className="col-md-3">
+                      <small className="text-muted">
+                        <strong>Status Legend:</strong>
+                      </small>
+                    </div>
+                    <div className="col-md-2">
+                      <span className="badge bg-info">📋 Short-Listed</span>
+                    </div>
+                    <div className="col-md-2">
+                      <span className="badge bg-success">🎉 Awarded</span>
+                    </div>
+                    <div className="col-md-2">
+                      <span className="badge bg-warning">❌ Not Short-Listed</span>
+                    </div>
+                    <div className="col-md-2">
+                      <span className="badge bg-danger">🚫 Disqualified</span>
+                    </div>
+                    <div className="col-md-1">
+                      <span className="badge bg-dark">🚫 Cancelled</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="mt-3">
             <div className="row">
               <div className="col-md-12 text-center">

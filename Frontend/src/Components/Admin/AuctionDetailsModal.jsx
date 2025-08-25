@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
   getAuctionDetails,
@@ -19,11 +18,14 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   
-  // States for award/disqualify functionality
+  // States for new functionality
   const [showDisqualifyModal, setShowDisqualifyModal] = useState(false);
+  const [showCancelModal, setCancelModal] = useState(false);
   const [disqualifyReason, setDisqualifyReason] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
   const [selectedBidder, setSelectedBidder] = useState(null);
   const [awardActionLoading, setAwardActionLoading] = useState({});
+  const [auctionStatus, setAuctionStatus] = useState('');
   
   // State for bid records modal
   const [showBidRecordsModal, setShowBidRecordsModal] = useState(false);
@@ -40,7 +42,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
    * Check if current user is system admin
    */
   const isSystemAdmin = () => {
-    console.log('Current User Role:', currentUser?.role);
     return currentUser?.role === 'system_admin' || currentUser?.role === 'sys_admin';
   };
 
@@ -49,9 +50,24 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
    */
   const canTakeAction = (auction) => {
     const status = auction?.calculated_status || auction?.status;
-    console.log('Auction Status:', status);
-    console.log('Is System Admin:', isSystemAdmin());
     return status?.toLowerCase() === 'pending' && isSystemAdmin();
+  };
+
+  /**
+   * Check if auction can be shortlisted (ended status and system admin)
+   */
+  const canShortlist = () => {
+    return auctionStatus === 'ended' && isSystemAdmin() && 
+           !topBidders.some(b => b.result_status === 'short-listed');
+  };
+
+  /**
+   * Check if auction can be cancelled
+   */
+  const canCancelAuction = () => {
+    return isSystemAdmin() && 
+           !['cancelled', 'ended'].includes(auctionStatus) &&
+           !topBidders.some(b => ['awarded', 'not_awarded'].includes(b.result_status));
   };
 
   /**
@@ -78,6 +94,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       
       if (result.success) {
         setTopBidders(result.topBidders || []);
+        setAuctionStatus(result.auctionStatus || '');
         console.log('Top bidders set:', result.topBidders);
       } else {
         console.error('Failed to fetch top bidders:', result.error);
@@ -86,29 +103,22 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
     } catch (err) {
       console.error('Fetch top bidders error:', err);
       setTopBidders([]);
-      // Don't set main error state for this as it might be expected (no bidders yet)
     }
   };
 
   /**
-   * Handle awarding a bidder
+   * Handle shortlisting top 5 bidders
    */
-  const handleAwardBidder = async (bidderId, bidderName) => {
-    if (!window.confirm(`Are you sure you want to award this auction to ${bidderName}?`)) {
+  const handleShortlistBidders = async () => {
+    if (!window.confirm('Are you sure you want to shortlist the top 5 bidders? This will send emails to shortlisted bidders and mark others as not shortlisted.')) {
       return;
     }
 
     try {
-      setAwardActionLoading(prev => ({ ...prev, [bidderId]: true }));
+      setActionLoading(true);
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       
-      // Extract bidder user ID from the bidder object
-      const bidder = topBidders.find(b => b.bidder_id === bidderId);
-      const bidderUserId = bidder?.bidder_user_id || bidderId;
-      
-      console.log('Awarding bidder:', bidderUserId, 'for auction:', identifier);
-      
-      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/award/${bidderUserId}`, {
+      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/shortlist`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -121,11 +131,51 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       }
 
       const result = await response.json();
-      console.log('Award response:', result);
+      
+      if (result.success) {
+        alert(`Successfully shortlisted ${result.data.shortlisted} bidders!`);
+        await fetchTopBidders(); // Refresh the data
+      } else {
+        throw new Error(result.error || "Failed to shortlist bidders");
+      }
+    } catch (err) {
+      console.error("Shortlist bidders error:", err);
+      alert(`Failed to shortlist bidders: ${err.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  /**
+   * Handle awarding a bidder
+   */
+  const handleAwardBidder = async (bidderId, bidderName) => {
+    if (!window.confirm(`Are you sure you want to award this auction to ${bidderName}? This will automatically mark other bidders as not awarded.`)) {
+      return;
+    }
+
+    try {
+      setAwardActionLoading(prev => ({ ...prev, [bidderId]: true }));
+      const identifier = auction.auction_id || auction.id || auction.AuctionID;
+      
+      console.log('Awarding bidder:', bidderId, 'for auction:', identifier);
+      
+      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/award/${bidderId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
       
       if (result.success) {
         alert(`${bidderName} has been awarded the auction successfully!`);
-        // Refresh top bidders to show updated statuses
         await fetchTopBidders();
       } else {
         throw new Error(result.error || "Failed to award bidder");
@@ -133,6 +183,46 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
     } catch (err) {
       console.error("Award bidder error:", err);
       alert(`Failed to award bidder: ${err.message}`);
+    } finally {
+      setAwardActionLoading(prev => ({ ...prev, [bidderId]: false }));
+    }
+  };
+
+  /**
+   * Handle marking bidder as not awarded
+   */
+  const handleMarkNotAwarded = async (bidderId, bidderName) => {
+    if (!window.confirm(`Are you sure you want to mark ${bidderName} as not awarded?`)) {
+      return;
+    }
+
+    try {
+      setAwardActionLoading(prev => ({ ...prev, [bidderId]: true }));
+      const identifier = auction.auction_id || auction.id || auction.AuctionID;
+      
+      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/not-award/${bidderId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`${bidderName} has been marked as not awarded.`);
+        await fetchTopBidders();
+      } else {
+        throw new Error(result.error || "Failed to mark as not awarded");
+      }
+    } catch (err) {
+      console.error("Mark not awarded error:", err);
+      alert(`Failed to mark as not awarded: ${err.message}`);
     } finally {
       setAwardActionLoading(prev => ({ ...prev, [bidderId]: false }));
     }
@@ -153,12 +243,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       setActionLoading(true);
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       
-      // Extract bidder user ID from the selected bidder
-      const bidderUserId = selectedBidder.bidder_user_id || selectedBidder.bidder_id;
-      
-      console.log('Disqualifying bidder:', bidderUserId, 'for auction:', identifier, 'Reason:', disqualifyReason);
-      
-      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/disqualify/${bidderUserId}`, {
+      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/disqualify/${selectedBidder.bidder_id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -172,14 +257,12 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       }
 
       const result = await response.json();
-      console.log('Disqualify response:', result);
       
       if (result.success) {
         alert(`${selectedBidder.bidder_name} has been disqualified successfully!`);
         setShowDisqualifyModal(false);
         setDisqualifyReason("");
         setSelectedBidder(null);
-        // Refresh top bidders to show updated statuses
         await fetchTopBidders();
       } else {
         throw new Error(result.error || "Failed to disqualify bidder");
@@ -193,20 +276,74 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
   };
 
   /**
-   * Open disqualify modal
+   * Handle cancelling auction
+   */
+  const handleCancelAuction = async () => {
+    if (!cancelReason.trim()) {
+      alert("Please provide a reason for cancellation.");
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      const identifier = auction.auction_id || auction.id || auction.AuctionID;
+      
+      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason: cancelReason }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`Auction has been cancelled successfully! ${result.biddersNotified} bidders have been notified.`);
+        setCancelModal(false);
+        setCancelReason("");
+        await fetchAuctionDetails();
+        await fetchTopBidders();
+      } else {
+        throw new Error(result.error || "Failed to cancel auction");
+      }
+    } catch (err) {
+      console.error("Cancel auction error:", err);
+      alert(`Failed to cancel auction: ${err.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  /**
+   * Open modals
    */
   const openDisqualifyModal = (bidder) => {
     setSelectedBidder(bidder);
     setShowDisqualifyModal(true);
   };
 
+  const openCancelModal = () => {
+    setCancelModal(true);
+  };
+
   /**
-   * Close disqualify modal
+   * Close modals
    */
   const closeDisqualifyModal = () => {
     setShowDisqualifyModal(false);
     setDisqualifyReason("");
     setSelectedBidder(null);
+  };
+
+  const closeCancelModal = () => {
+    setCancelModal(false);
+    setCancelReason("");
   };
 
   /**
@@ -217,7 +354,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       setLoading(true);
       setError(null);
 
-      // Use the correct ID field - prefer auction_id if available
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       console.log("Fetching details for:", identifier);
 
@@ -225,11 +361,9 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
 
       let details = null;
 
-      // Handle details response
       if (detailsResponse?.success) {
         details = {
           ...detailsResponse.auction,
-          // Ensure backward compatibility
           InvitedBidders:
             detailsResponse.auction.auction_bidders
               ?.map((b) => b.name)
@@ -249,9 +383,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
     }
   };
 
-  /**
-   * Handle auction approval
-   */
+  // [Previous approval/rejection handlers remain the same...]
   const handleApproveAuction = async () => {
     if (!window.confirm("Are you sure you want to approve this auction?")) {
       return;
@@ -266,9 +398,8 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       
       if (response.success) {
         alert("Auction approved successfully!");
-        await fetchAuctionDetails(); // Refresh the data
-        // Optionally close modal or refresh parent component
-        if (onClose) onClose(true); // Pass true to indicate refresh needed
+        await fetchAuctionDetails();
+        if (onClose) onClose(true);
       } else {
         throw new Error(response.error || "Failed to approve auction");
       }
@@ -280,9 +411,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
     }
   };
 
-  /**
-   * Handle auction rejection
-   */
   const handleRejectAuction = async () => {
     if (!rejectionReason.trim()) {
       alert("Please provide a reason for rejection.");
@@ -300,9 +428,8 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
         alert("Auction rejected successfully!");
         setShowRejectModal(false);
         setRejectionReason("");
-        await fetchAuctionDetails(); // Refresh the data
-        // Optionally close modal or refresh parent component
-        if (onClose) onClose(true); // Pass true to indicate refresh needed
+        await fetchAuctionDetails();
+        if (onClose) onClose(true);
       } else {
         throw new Error(response.error || "Failed to reject auction");
       }
@@ -331,12 +458,18 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
         return "status-badge status-ended";
       case "cancelled":
         return "status-badge status-cancelled";
+      case "short-listed":
+        return "status-badge status-shortlisted";
+      case "not-short-listed":
+        return "status-badge status-not-shortlisted";
       case "awarded":
         return "status-badge status-awarded";
       case "not_awarded":
         return "status-badge status-not-awarded";
       case "disqualified":
         return "status-badge status-disqualified";
+      case "cancel":
+        return "status-badge status-cancelled";
       default:
         return "status-badge status-default";
     }
@@ -409,7 +542,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
     );
   }
 
-  // Use auction details if available, otherwise fall back to original auction data
   const displayAuction = auctionDetails || auction;
   const currentStatus = (displayAuction.calculated_status || displayAuction.status)?.toLowerCase();
 
@@ -421,7 +553,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
           <div className="modal-header">
             <div className="header-content">
               <h2>Auction Details</h2>
-              
             </div>
             <button className="close-button" onClick={onClose}>
               ×
@@ -451,6 +582,27 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                   disabled={actionLoading}
                 >
                   ❌ Reject
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Shortlist Action Banner for Ended Auctions */}
+          {canShortlist() && (
+            <div className="admin-action-banner shortlist-banner">
+              <div className="banner-content">
+                <div className="banner-icon">🎯</div>
+                <div className="banner-text">
+                  <strong>Ready for Shortlisting:</strong> Select top 5 bidders and send quotation requests.
+                </div>
+              </div>
+              <div className="banner-actions">
+                <button
+                  className="btn btn-shortlist btn-small"
+                  onClick={handleShortlistBidders}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Processing...' : '📋 Shortlist Top 5'}
                 </button>
               </div>
             </div>
@@ -546,9 +698,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                     <label>Created At:</label>
                     <span>
                       {displayAuction.created_at
-                        ? new Date(displayAuction.created_at).toLocaleString(
-                            "en-GB"
-                          )
+                        ? new Date(displayAuction.created_at).toLocaleString("en-GB")
                         : "Not available"}
                     </span>
                   </div>
@@ -562,8 +712,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                     </div>
                   )}
                 </div>
-
-               
               </div>
             )}
 
@@ -579,7 +727,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                         0}{" "}
                       bidders invited
                     </span>
-                    
                   </div>
                 </div>
 
@@ -643,14 +790,23 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
               <div className="top-bidders-section">
                 <div className="section-header">
                   <h3>🏆 Top 5 Bidders</h3>
-                   <div className="details-actions">
-                  <button
-                    className="btn btn-bid-records"
-                    onClick={handleViewBidRecords}
-                  >
-                    📋 View All Bid Records
-                  </button>
-                </div>
+                  <div className="details-actions">
+                    <button
+                      className="btn btn-bid-records"
+                      onClick={handleViewBidRecords}
+                    >
+                      📋 View All Bid Records
+                    </button>
+                    {canCancelAuction() && (
+                      <button
+                        className="btn btn-cancel-auction"
+                        onClick={openCancelModal}
+                        disabled={actionLoading}
+                      >
+                        🚫 Cancel Auction
+                      </button>
+                    )}
+                  </div>
                   <div className="section-actions">
                     <span className="participation-count">
                       {topBidders.length} top bidders
@@ -666,16 +822,11 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
 
                 {topBidders.length > 0 ? (
                   <div className="top-bidders-container">
-                    <div className="top-bidders-explanation">
-                      
-                    </div>
-
                     <div className="top-bidders-table-container">
                       <table className="top-bidders-table">
                         <thead>
                           <tr>
                             <th>Rank</th>
-                           
                             <th>Bidder Name</th>
                             <th>Company</th>
                             <th>Latest Bid Amount</th>
@@ -690,7 +841,9 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                               className={`bidder-row ${
                                 bidder.result_status === 'awarded' ? 'awarded-row' : 
                                 bidder.result_status === 'disqualified' ? 'disqualified-row' : 
-                                bidder.result_status === 'not_awarded' ? 'not-awarded-row' : ''
+                                bidder.result_status === 'not_awarded' ? 'not-awarded-row' :
+                                bidder.result_status === 'short-listed' ? 'shortlisted-row' :
+                                bidder.result_status === 'not-short-listed' ? 'not-shortlisted-row' : ''
                               }`}
                             >
                               <td className="rank-cell">
@@ -711,14 +864,14 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                               <td>
                                 <span className={getStatusBadgeClass(bidder.result_status || 'pending')}>
                                   {bidder.result_status ? 
-                                    bidder.result_status.toUpperCase().replace('_', ' ') : 
+                                    bidder.result_status.toUpperCase().replace('_', ' ').replace('-', ' ') : 
                                     'PENDING'
                                   }
                                 </span>
                               </td>
                               {isSystemAdmin() && (
                                 <td className="actions-cell">
-                                  {!bidder.result_status || bidder.result_status === 'pending' ? (
+                                  {bidder.result_status === 'short-listed' ? (
                                     <div className="action-buttons">
                                       <button
                                         className="btn btn-award btn-small"
@@ -729,6 +882,14 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                                         {awardActionLoading[bidder.bidder_id] ? '⏳' : '🏆'} Award
                                       </button>
                                       <button
+                                        className="btn btn-not-award btn-small"
+                                        onClick={() => handleMarkNotAwarded(bidder.bidder_id, bidder.bidder_name)}
+                                        disabled={awardActionLoading[bidder.bidder_id]}
+                                        title="Mark as not awarded"
+                                      >
+                                        ➖ Not Award
+                                      </button>
+                                      <button
                                         className="btn btn-disqualify btn-small"
                                         onClick={() => openDisqualifyModal(bidder)}
                                         disabled={awardActionLoading[bidder.bidder_id]}
@@ -736,6 +897,10 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                                       >
                                         ❌ Disqualify
                                       </button>
+                                    </div>
+                                  ) : !bidder.result_status || bidder.result_status === 'pending' ? (
+                                    <div className="action-status">
+                                      <span className="status-text pending-text">⏳ Awaiting Shortlist</span>
                                     </div>
                                   ) : (
                                     <div className="action-status">
@@ -746,9 +911,10 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                                         <span className="status-text not-awarded-text">➖ Not Awarded</span>
                                       )}
                                       {bidder.result_status === 'disqualified' && (
-                                        <span className="status-text disqualified-text">
-                                          🚫 Disqualified
-                                        </span>
+                                        <span className="status-text disqualified-text">🚫 Disqualified</span>
+                                      )}
+                                      {bidder.result_status === 'not-short-listed' && (
+                                        <span className="status-text not-shortlisted-text">❌ Not Shortlisted</span>
                                       )}
                                     </div>
                                   )}
@@ -759,11 +925,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                         </tbody>
                       </table>
                     </div>
-
-                    
-                        
-                       
-                        
                   </div>
                 ) : (
                   <div className="no-top-bidders-data">
@@ -792,14 +953,12 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
             )}
           </div>
 
-
           {/* Modal Footer */}
           <div className="modal-footer">
             <div className="footer-info">
               <small>Last updated: {new Date().toLocaleString("en-GB")}</small>
             </div>
             <div className="footer-actions">
-              {/* Show approval/rejection buttons only for system admins and pending auctions */}
               {canTakeAction(displayAuction) && (
                 <>
                   <button
@@ -859,9 +1018,6 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                   className="rejection-textarea"
                   required
                 />
-                <small className="help-text">
-                  This reason will be visible to bidders.
-                </small>
               </div>
             </div>
             <div className="modal-footer">
@@ -893,17 +1049,11 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
           <div className="modal-content disqualify-modal">
             <div className="modal-header">
               <h3>Disqualify Bidder</h3>
-              <button 
-                className="close-button" 
-                onClick={closeDisqualifyModal}
-              >
-                ×
-              </button>
+              <button className="close-button" onClick={closeDisqualifyModal}>×</button>
             </div>
             <div className="modal-body">
               <div className="disqualify-form">
                 <div className="bidder-info">
-                  
                   <p><strong>Bidder Name:</strong> {selectedBidder.bidder_name}</p>
                   <p><strong>Company:</strong> {selectedBidder.company_name || "Not specified"}</p>
                   <p><strong>Latest Bid:</strong> {formatCurrency(selectedBidder.latest_bid_amount)}</p>
@@ -921,17 +1071,10 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                   className="disqualify-textarea"
                   required
                 />
-                <small className="help-text">
-                  This reason will be recorded and visible to administrators.
-                </small>
               </div>
             </div>
             <div className="modal-footer">
-              <button 
-                className="btn btn-secondary" 
-                onClick={closeDisqualifyModal}
-                disabled={actionLoading}
-              >
+              <button className="btn btn-secondary" onClick={closeDisqualifyModal} disabled={actionLoading}>
                 Cancel
               </button>
               <button 
@@ -940,6 +1083,60 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                 disabled={actionLoading || !disqualifyReason.trim()}
               >
                 {actionLoading ? 'Disqualifying...' : '🚫 Disqualify Bidder'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Auction Modal */}
+      {showCancelModal && (
+        <div className="modal-backdrop" style={{ zIndex: 1001 }}>
+          <div className="modal-content cancel-modal">
+            <div className="modal-header">
+              <h3>Cancel Auction</h3>
+              <button className="close-button" onClick={closeCancelModal}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="cancel-form">
+                <div className="auction-info">
+                  <p><strong>Auction ID:</strong> {displayAuction.auction_id || displayAuction.AuctionID}</p>
+                  <p><strong>Title:</strong> {displayAuction.title || displayAuction.Title}</p>
+                </div>
+                <div className="warning-notice">
+                  <h4>⚠️ Warning</h4>
+                  <p>Cancelling this auction will:</p>
+                  <ul>
+                    <li>Mark all bidders as cancelled</li>
+                    <li>Send cancellation emails to all participants</li>
+                    <li>Make this auction permanently unavailable</li>
+                  </ul>
+                </div>
+                <hr />
+                <label htmlFor="cancelReason">
+                  <strong>Reason for Cancellation:</strong> <span className="required">*</span>
+                </label>
+                <textarea
+                  id="cancelReason"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Please provide a detailed reason for cancelling this auction..."
+                  rows="4"
+                  className="cancel-textarea"
+                  required
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={closeCancelModal} disabled={actionLoading}>
+                Keep Auction
+              </button>
+              <button 
+                className="btn btn-cancel-auction" 
+                onClick={handleCancelAuction}
+                disabled={actionLoading || !cancelReason.trim()}
+              >
+                {actionLoading ? 'Cancelling...' : '🚫 Cancel Auction'}
               </button>
             </div>
           </div>

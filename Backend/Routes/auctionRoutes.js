@@ -21,14 +21,17 @@ const {
   getLiveAuctionDetails,
   getLiveAuctionRankings,
   checkAuctionLiveStatus,
-  getAuctionStatistics,        // NEW
-  getActivelyParticipatingBidders  // NEW
+  getAuctionStatistics,
+  getActivelyParticipatingBidders
 } = require('../Controllers/liveAuction');
 
 // Import results controllers
 const { 
+  shortlistTopBidders,        // NEW
   awardBidder, 
+  markBidderNotAwarded,       // NEW
   disqualifyBidder,  
+  cancelAuction,              // NEW
   getAllAuctionBids, 
   getTopBidders,
   getAuctionResultsOverview,
@@ -85,7 +88,7 @@ router.get('/live/:auctionId/rankings', authenticateToken, getLiveAuctionRanking
 // Check auction live status
 router.get('/live/:auctionId/status', authenticateToken, checkAuctionLiveStatus);
 
-// ===== NEW STATISTICS ROUTES =====
+// ===== STATISTICS ROUTES =====
 
 // Get detailed auction statistics (Admin only)
 router.get('/:auctionId/statistics', authenticateToken, requireAdminOrSystemAdmin, getAuctionStatistics);
@@ -93,29 +96,37 @@ router.get('/:auctionId/statistics', authenticateToken, requireAdminOrSystemAdmi
 // Get actively participating bidders for an auction (Admin only)
 router.get('/:auctionId/active-bidders', authenticateToken, requireAdminOrSystemAdmin, getActivelyParticipatingBidders);
 
+// ===== RESULTS MANAGEMENT ROUTES =====
 
-// ===== Award/Disqualify Endpoints ====
-
-// get top 5 bidders
+// Get top 5 bidders
 router.get('/:auctionId/top-bidders', authenticateToken, getTopBidders);
 
-// Award bidder
-router.post('/:auctionId/award/:bidderId',authenticateToken, requireSystemAdmin, awardBidder);
-
-// Disqualify bidder  
-router.post('/:auctionId/disqualify/:bidderId', authenticateToken, requireSystemAdmin, disqualifyBidder);
-
-// Get auction results
-//router.get('/auction/:auctionId/results', authenticateToken, getAuctionResults);
-
-// Get all records for an auction - done
+// Get all bid records for an auction
 router.get('/:auctionId/all-bids', authenticateToken, getAllAuctionBids);
 
+// ===== NEW SHORTLISTING & RESULTS ROUTES =====
+
+// Shortlist top 5 bidders (System Admin only) - NEW
+router.post('/:auctionId/shortlist', authenticateToken, requireSystemAdmin, shortlistTopBidders);
+
+// Award bidder (System Admin only) - UPDATED
+router.post('/:auctionId/award/:bidderId', authenticateToken, requireSystemAdmin, awardBidder);
+
+// Mark bidder as not awarded (System Admin only) - NEW
+router.post('/:auctionId/not-award/:bidderId', authenticateToken, requireSystemAdmin, markBidderNotAwarded);
+
+// Disqualify bidder (System Admin only) - UPDATED
+router.post('/:auctionId/disqualify/:bidderId', authenticateToken, requireSystemAdmin, disqualifyBidder);
+
+// Cancel auction (System Admin only) - NEW
+router.post('/:auctionId/cancel', authenticateToken, requireSystemAdmin, cancelAuction);
+
+// ===== RESULTS VIEWING ROUTES =====
 
 // Get auction results overview for admin dashboard
 router.get('/results/overview', authenticateToken, requireAdminOrSystemAdmin, getAuctionResultsOverview);
 
-// Get bidder's auction results
-router.get('/results/bidder/:bidderId', authenticateToken, requireBidder, getBidderAuctionResults);
+// Get bidder's auction results - UPDATED endpoint
+router.get('/results/bidder/results', authenticateToken, requireBidder, getBidderAuctionResults);
 
 module.exports = router;
