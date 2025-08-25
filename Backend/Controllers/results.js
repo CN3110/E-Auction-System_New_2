@@ -1,21 +1,24 @@
 const db = require('../Config/database');
 const { sendShortlistEmail, sendDisqualificationEmail, sendCancellationEmail, sendAwardEmail } = require('../services/emailService');
 
-// ✅ Shortlist Top 5 Bidders (NEW FUNCTION)
+// ✅ FIXED: Shortlist Top 5 Bidders
 const shortlistTopBidders = async (req, res) => {
   const { auctionId } = req.params;
 
   try {
     const result = await db.transaction(async (connection) => {
-      // 1. Get auction UUID and validate
+      // 1. Get auction UUID and validate - FIXED: Remove "ended" requirement
       const [auctionRows] = await connection.execute(
-        'SELECT id, title FROM auctions WHERE auction_id = ? AND status = "ended"',
+        'SELECT id, title, status FROM auctions WHERE auction_id = ?',
         [auctionId]
       );
-      if (auctionRows.length === 0) throw new Error('Auction not found or not ended');
+      if (auctionRows.length === 0) throw new Error('Auction not found');
+      
       const auctionUuid = auctionRows[0].id;
       const auctionTitle = auctionRows[0].title;
+      const auctionStatus = auctionRows[0].status;
 
+      
       // 2. Get top 5 bidders (lowest bids for reverse auction)
       const [topBiddersRows] = await connection.execute(`
         SELECT 
@@ -23,16 +26,12 @@ const shortlistTopBidders = async (req, res) => {
           u.name as bidder_name,
           u.email as bidder_email,
           u.company as company_name,
-          b.amount as latest_bid_amount
+          MIN(b.amount) as lowest_bid_amount
         FROM bids b
         JOIN users u ON b.bidder_id = u.id
         WHERE b.auction_id = ? 
-        AND b.bid_time = (
-          SELECT MAX(bid_time) 
-          FROM bids 
-          WHERE auction_id = b.auction_id AND bidder_id = b.bidder_id
-        )
-        ORDER BY b.amount ASC
+        GROUP BY b.bidder_id, u.name, u.email, u.company
+        ORDER BY MIN(b.amount) ASC
         LIMIT 5
       `, [auctionUuid]);
 
@@ -40,40 +39,54 @@ const shortlistTopBidders = async (req, res) => {
         throw new Error('No bidders found for this auction');
       }
 
-      // 3. Mark top 5 as short-listed
+      // 3. Get all unique bidders who participated
+      const [allBiddersRows] = await connection.execute(`
+        SELECT DISTINCT bidder_id
+        FROM bids 
+        WHERE auction_id = ?
+      `, [auctionUuid]);
+
+      const allBidderIds = allBiddersRows.map(b => b.bidder_id);
       const topBidderIds = topBiddersRows.map(b => b.bidder_id);
-      const placeholders = topBidderIds.map(() => '?').join(',');
-      
-      await connection.execute(`
-        INSERT INTO auction_results (id, auction_id, bidder_id, status, shortlisted_at)
-        SELECT UUID(), ?, bidder_id, 'short-listed', NOW()
-        FROM (SELECT DISTINCT bidder_id FROM bids WHERE auction_id = ?) AS all_bidders
-        WHERE bidder_id IN (${placeholders})
-        ON DUPLICATE KEY UPDATE 
-          status = 'short-listed', 
-          shortlisted_at = NOW(), 
-          updated_at = NOW()
-      `, [auctionUuid, auctionUuid, ...topBidderIds]);
 
-      // 4. Mark others as not-short-listed
-      await connection.execute(`
-        INSERT INTO auction_results (id, auction_id, bidder_id, status)
-        SELECT UUID(), ?, bidder_id, 'not-short-listed'
-        FROM (SELECT DISTINCT bidder_id FROM bids WHERE auction_id = ?) AS all_bidders
-        WHERE bidder_id NOT IN (${placeholders})
-        ON DUPLICATE KEY UPDATE 
-          status = 'not-short-listed', 
-          updated_at = NOW()
-      `, [auctionUuid, auctionUuid, ...topBidderIds]);
+      // 4. Mark top 5 as short-listed
+      if (topBidderIds.length > 0) {
+        const topPlaceholders = topBidderIds.map(() => '?').join(',');
+        
+        await connection.execute(`
+          INSERT INTO auction_results (id, auction_id, bidder_id, status, shortlisted_at)
+          VALUES ${topBidderIds.map(() => '(UUID(), ?, ?, "short-listed", NOW())').join(', ')}
+          ON DUPLICATE KEY UPDATE 
+            status = 'short-listed', 
+            shortlisted_at = NOW(), 
+            updated_at = NOW()
+        `, [
+          ...topBidderIds.flatMap(bidderId => [auctionUuid, bidderId])
+        ]);
+      }
 
-      // 5. Send shortlist emails to top 5 bidders
+      // 5. Mark others as not-short-listed
+      const notShortlistedIds = allBidderIds.filter(id => !topBidderIds.includes(id));
+      if (notShortlistedIds.length > 0) {
+        await connection.execute(`
+          INSERT INTO auction_results (id, auction_id, bidder_id, status)
+          VALUES ${notShortlistedIds.map(() => '(UUID(), ?, ?, "not-short-listed")').join(', ')}
+          ON DUPLICATE KEY UPDATE 
+            status = 'not-short-listed', 
+            updated_at = NOW()
+        `, [
+          ...notShortlistedIds.flatMap(bidderId => [auctionUuid, bidderId])
+        ]);
+      }
+
+      // 6. Send shortlist emails to top 5 bidders
       const emailPromises = topBiddersRows.map(bidder => 
         sendShortlistEmail({
           to: bidder.bidder_email,
           bidderName: bidder.bidder_name,
           auctionId: auctionId,
           auctionTitle: auctionTitle,
-          bidAmount: bidder.latest_bid_amount
+          bidAmount: bidder.lowest_bid_amount
         })
       );
 
@@ -87,10 +100,9 @@ const shortlistTopBidders = async (req, res) => {
 
       return { 
         shortlisted: topBiddersRows.length,
-        notShortlisted: topBidderIds.length > 0 ? await connection.execute(
-          `SELECT COUNT(*) as count FROM bids WHERE auction_id = ? AND bidder_id NOT IN (${placeholders})`,
-          [auctionUuid, ...topBidderIds]
-        ).then(([rows]) => rows[0].count) : 0
+        notShortlisted: notShortlistedIds.length,
+        auctionStatus: auctionStatus,
+        topBidders: topBiddersRows
       };
     });
 
@@ -107,7 +119,7 @@ const shortlistTopBidders = async (req, res) => {
   }
 };
 
-// ✅ Award Bidder (UPDATED)
+// ✅ FIXED: Award Bidder
 const awardBidder = async (req, res) => {
   const { auctionId, bidderId } = req.params;
 
@@ -122,17 +134,27 @@ const awardBidder = async (req, res) => {
       const auctionUuid = auctionRows[0].id;
       const auctionTitle = auctionRows[0].title;
 
-      // 2. Get bidder details
+      // 2. Get bidder details - FIXED: Use user_id instead of id for bidderId
       const [bidderRows] = await connection.execute(
-        'SELECT id, name, email FROM users WHERE id = ?',
-        [bidderId]
+        'SELECT id, name, email FROM users WHERE user_id = ? OR id = ?',
+        [bidderId, bidderId]
       );
       if (bidderRows.length === 0) throw new Error('Bidder not found');
       const bidderUuid = bidderRows[0].id;
       const bidderName = bidderRows[0].name;
       const bidderEmail = bidderRows[0].email;
 
-      // 3. Mark this bidder awarded
+      // 3. Check if bidder was shortlisted first
+      const [shortlistCheck] = await connection.execute(
+        'SELECT status FROM auction_results WHERE auction_id = ? AND bidder_id = ?',
+        [auctionUuid, bidderUuid]
+      );
+
+      if (shortlistCheck.length === 0) {
+        throw new Error('Bidder must be shortlisted before awarding');
+      }
+
+      // 4. Mark this bidder as awarded
       await connection.execute(
         `INSERT INTO auction_results (id, auction_id, bidder_id, status)
          VALUES (UUID(), ?, ?, 'awarded')
@@ -140,7 +162,7 @@ const awardBidder = async (req, res) => {
         [auctionUuid, bidderUuid]
       );
 
-      // 4. Mark all others not awarded (only those who were short-listed)
+      // 5. Mark all others as not awarded (only those who were short-listed)
       await connection.execute(
         `UPDATE auction_results 
          SET status = 'not_awarded', updated_at = NOW()
@@ -148,7 +170,7 @@ const awardBidder = async (req, res) => {
         [auctionUuid, bidderUuid]
       );
 
-      // 5. Send award email
+      // 6. Send award email
       try {
         await sendAwardEmail({
           to: bidderEmail,
@@ -173,7 +195,7 @@ const awardBidder = async (req, res) => {
   }
 };
 
-// ✅ Mark Bidder as Not Awarded (NEW FUNCTION)
+// ✅ FIXED: Mark Bidder as Not Awarded
 const markBidderNotAwarded = async (req, res) => {
   const { auctionId, bidderId } = req.params;
 
@@ -187,10 +209,10 @@ const markBidderNotAwarded = async (req, res) => {
       if (auctionRows.length === 0) throw new Error('Auction not found');
       const auctionUuid = auctionRows[0].id;
 
-      // 2. Get bidder UUID
+      // 2. Get bidder UUID - FIXED: Use user_id or id
       const [bidderRows] = await connection.execute(
-        'SELECT id, name FROM users WHERE id = ?',
-        [bidderId]
+        'SELECT id, name FROM users WHERE user_id = ? OR id = ?',
+        [bidderId, bidderId]
       );
       if (bidderRows.length === 0) throw new Error('Bidder not found');
       const bidderUuid = bidderRows[0].id;
@@ -216,7 +238,7 @@ const markBidderNotAwarded = async (req, res) => {
   }
 };
 
-// ✅ Disqualify Bidder (UPDATED)
+// ✅ FIXED: Disqualify Bidder
 const disqualifyBidder = async (req, res) => {
   const { auctionId, bidderId } = req.params;
   const { reason } = req.body;
@@ -236,10 +258,10 @@ const disqualifyBidder = async (req, res) => {
       const auctionUuid = auctionRows[0].id;
       const auctionTitle = auctionRows[0].title;
 
-      // 2. Get bidder details
+      // 2. Get bidder details - FIXED: Use user_id or id
       const [bidderRows] = await connection.execute(
-        'SELECT id, name, email FROM users WHERE id = ?',
-        [bidderId]
+        'SELECT id, name, email FROM users WHERE user_id = ? OR id = ?',
+        [bidderId, bidderId]
       );
       if (bidderRows.length === 0) throw new Error('Bidder not found');
       const bidderUuid = bidderRows[0].id;
@@ -280,7 +302,7 @@ const disqualifyBidder = async (req, res) => {
   }
 };
 
-// ✅ Cancel Auction (NEW FUNCTION)
+// ✅ FIXED: Cancel Auction
 const cancelAuction = async (req, res) => {
   const { auctionId } = req.params;
   const { reason } = req.body;
@@ -304,8 +326,8 @@ const cancelAuction = async (req, res) => {
       const currentStatus = auctionRows[0].status;
 
       // Check if auction can be cancelled
-      if (['cancelled', 'ended'].includes(currentStatus)) {
-        throw new Error(`Cannot cancel auction with status: ${currentStatus}`);
+      if (currentStatus === 'cancelled') {
+        throw new Error('Auction is already cancelled');
       }
 
       // 2. Update auction status to cancelled
@@ -316,17 +338,28 @@ const cancelAuction = async (req, res) => {
         [adminId, reason, auctionUuid]
       );
 
-      // 3. Update all auction results to cancelled
-      await connection.execute(
-        `INSERT INTO auction_results (id, auction_id, bidder_id, status, cancel_reason)
-         SELECT UUID(), ?, bidder_id, 'cancel', ?
-         FROM bids 
-         WHERE auction_id = ?
-         ON DUPLICATE KEY UPDATE status = 'cancel', cancel_reason = ?, updated_at = NOW()`,
-        [auctionUuid, reason, auctionUuid, reason]
-      );
+      // 3. Get all unique bidders first
+      const [allBiddersRows] = await connection.execute(`
+        SELECT DISTINCT bidder_id
+        FROM bids 
+        WHERE auction_id = ?
+      `, [auctionUuid]);
 
-      // 4. Get all bidder emails for notification
+      // 4. Update all auction results to cancelled for each bidder
+      if (allBiddersRows.length > 0) {
+        const bidderIds = allBiddersRows.map(b => b.bidder_id);
+        await connection.execute(
+          `INSERT INTO auction_results (id, auction_id, bidder_id, status, cancel_reason)
+           VALUES ${bidderIds.map(() => '(UUID(), ?, ?, "cancel", ?)').join(', ')}
+           ON DUPLICATE KEY UPDATE status = 'cancel', cancel_reason = ?, updated_at = NOW()`,
+          [
+            ...bidderIds.flatMap(bidderId => [auctionUuid, bidderId, reason]),
+            reason
+          ]
+        );
+      }
+
+      // 5. Get all bidder emails for notification
       const [bidderEmails] = await connection.execute(`
         SELECT DISTINCT u.email, u.name
         FROM bids b
@@ -334,22 +367,24 @@ const cancelAuction = async (req, res) => {
         WHERE b.auction_id = ?
       `, [auctionUuid]);
 
-      // 5. Send cancellation emails to all bidders
-      const emailPromises = bidderEmails.map(bidder => 
-        sendCancellationEmail({
-          to: bidder.email,
-          bidderName: bidder.name,
-          auctionId: auctionId,
-          auctionTitle: auctionTitle,
-          reason: reason
-        })
-      );
+      // 6. Send cancellation emails to all bidders
+      if (bidderEmails.length > 0) {
+        const emailPromises = bidderEmails.map(bidder => 
+          sendCancellationEmail({
+            to: bidder.email,
+            bidderName: bidder.name,
+            auctionId: auctionId,
+            auctionTitle: auctionTitle,
+            reason: reason
+          })
+        );
 
-      try {
-        await Promise.all(emailPromises);
-        console.log('Cancellation emails sent successfully');
-      } catch (emailError) {
-        console.error('Error sending cancellation emails:', emailError);
+        try {
+          await Promise.all(emailPromises);
+          console.log('Cancellation emails sent successfully');
+        } catch (emailError) {
+          console.error('Error sending cancellation emails:', emailError);
+        }
       }
 
       return { auctionTitle, biddersNotified: bidderEmails.length };
@@ -368,7 +403,7 @@ const cancelAuction = async (req, res) => {
   }
 };
 
-// Update existing functions...
+// ✅ FIXED: Get All Auction Bids
 const getAllAuctionBids = async (req, res) => {
   const { auctionId } = req.params; 
   
@@ -434,7 +469,7 @@ const getAllAuctionBids = async (req, res) => {
   }
 };
 
-// Get top bidders for reverse auction (updated to include new statuses)
+// ✅ FIXED: Get top bidders for reverse auction
 const getTopBidders = async (req, res) => {
   const { auctionId } = req.params;
   
@@ -456,13 +491,15 @@ const getTopBidders = async (req, res) => {
     const auctionUuid = auctionCheck.data[0].id;
     const auctionStatus = auctionCheck.data[0].status;
 
+    // Get top bidders with their lowest bids (for reverse auction)
     const result = await db.query(`
       SELECT 
         b.bidder_id,
         u.name as bidder_name,
         u.company as company_name,
-        b.amount as latest_bid_amount,
-        b.bid_time as latest_bid_time,
+        u.user_id as bidder_user_id,
+        MIN(b.amount) as lowest_bid_amount,
+        MAX(b.bid_time) as latest_bid_time,
         ar.status as result_status,
         ar.disqualification_reason,
         ar.cancel_reason,
@@ -471,12 +508,8 @@ const getTopBidders = async (req, res) => {
       JOIN users u ON b.bidder_id = u.id
       LEFT JOIN auction_results ar ON ar.auction_id = b.auction_id AND ar.bidder_id = b.bidder_id
       WHERE b.auction_id = ? 
-      AND b.bid_time = (
-        SELECT MAX(bid_time) 
-        FROM bids 
-        WHERE auction_id = b.auction_id AND bidder_id = b.bidder_id
-      )
-      ORDER BY b.amount ASC
+      GROUP BY b.bidder_id, u.name, u.company, u.user_id, ar.status, ar.disqualification_reason, ar.cancel_reason, ar.shortlisted_at
+      ORDER BY MIN(b.amount) ASC
       LIMIT 5
     `, [auctionUuid]);
 
@@ -498,7 +531,7 @@ const getTopBidders = async (req, res) => {
   }
 };
 
-// Update helper function to include new statuses
+// Helper function to format result status
 const formatResultStatus = (status) => {
   const statusMap = {
     'pending': 'Pending Review',
@@ -512,7 +545,7 @@ const formatResultStatus = (status) => {
   return statusMap[status] || status;
 };
 
-// Other existing functions remain the same...
+// Rest of the existing functions remain the same...
 const getAuctionResultsOverview = async (req, res) => {
   try {
     const result = await db.query(`
@@ -523,9 +556,8 @@ const getAuctionResultsOverview = async (req, res) => {
         u.name AS "Bidder Name",
         u.user_id AS "Bidder User ID",
         u.company AS "Company",
-        (SELECT amount FROM bids 
-         WHERE auction_id = a.id AND bidder_id = u.id 
-         ORDER BY bid_time DESC LIMIT 1) AS "Winning Bidding Price",
+        (SELECT MIN(amount) FROM bids 
+         WHERE auction_id = a.id AND bidder_id = u.id) AS "Winning Bidding Price",
         ar.status AS "Award Status",
         ar.quotation_uploaded_at AS "Quotation Uploaded",
         a.auction_date AS "Auction Date",
@@ -564,7 +596,7 @@ const getBidderAuctionResults = async (req, res) => {
       SELECT 
         a.auction_id AS "Auction ID",
         a.title AS "Title",
-        MAX(b.amount) AS "Bid Amount",
+        MIN(b.amount) AS "Best Bid Amount",
         ar.status AS "Result",
         CONCAT(a.auction_date, ' ', a.start_time) AS "Date Time",
         a.auction_date AS "Auction Date",
@@ -591,7 +623,7 @@ const getBidderAuctionResults = async (req, res) => {
     const formattedResults = result.data.map(item => ({
       "Auction ID": item["Auction ID"],
       "Title": item["Title"],
-      "Bid Amount": item["Bid Amount"],
+      "Best Bid Amount": item["Best Bid Amount"],
       "Result": formatResultStatus(item["Result"]),
       "Date Time": formatDateTime(item["Auction Date"], item["Start Time"]),
       "Raw Status": item["Result"],
@@ -632,15 +664,15 @@ const formatDateTime = (date, time) => {
 };
 
 module.exports = {
-  shortlistTopBidders,         // NEW
-  awardBidder,                 // UPDATED
-  markBidderNotAwarded,        // NEW
-  disqualifyBidder,            // UPDATED
-  cancelAuction,               // NEW
-  getAllAuctionBids,           // UPDATED
-  getTopBidders,               // UPDATED
-  getAuctionResultsOverview,   // UPDATED
-  getBidderAuctionResults,     // UPDATED
-  formatResultStatus,          // UPDATED
+  shortlistTopBidders,         
+  awardBidder,                 
+  markBidderNotAwarded,        
+  disqualifyBidder,            
+  cancelAuction,               
+  getAllAuctionBids,           
+  getTopBidders,               
+  getAuctionResultsOverview,   
+  getBidderAuctionResults,     
+  formatResultStatus,          
   formatDateTime
 };
