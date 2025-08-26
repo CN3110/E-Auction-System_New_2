@@ -22,7 +22,7 @@ const TermsAndConditions = () => {
           goods or services. The auction process follows these steps:
         </p>
         <ul>
-          <li>Only pre-approved, shortlisted bidders may participate in auctions</li>
+          <li>Only account created by the admin, and invited bidders may participate in auctions</li>
           <li>Bidders submit decreasing bids during the auction period</li>
           <li>Real-time ranking is displayed but is not final</li>
           <li>Admin reserves the right to disqualify any bidder for valid reasons</li>
@@ -34,10 +34,12 @@ const TermsAndConditions = () => {
           As a bidder, you agree to:
         </p>
         <ul>
-          <li>Provide accurate and truthful information during registration</li>
-          <li>Maintain the confidentiality of your login credentials</li>
+          
+          <li>Maintain the confidentiality of your emailed login credentials</li>
           <li>Submit bids in good faith with intention to honor if awarded</li>
+          <li>as the rankings update every 10 minutes, you have to make sure do not bidding when the rest of time is 10s.</li>
           <li>Comply with all applicable laws and regulations</li>
+          <li>after shortlisted you have to submit relavant documents, and then the adminstarion deside the final result.</li>
           <li>Not engage in collusion or anti-competitive behavior</li>
         </ul>
 
@@ -91,16 +93,7 @@ const TermsAndConditions = () => {
           Anunine Holdings Pvt Ltd is registered.
         </p>
 
-        <div className="acceptance-section">
-          <label>
-            <input 
-              type="checkbox" 
-              checked={accepted}
-              onChange={() => setAccepted(!accepted)}
-            />
-            I have read and agree to the Terms and Conditions
-          </label>
-        </div>
+        
       </div>
     </div>
   );
