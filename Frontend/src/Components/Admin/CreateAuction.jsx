@@ -53,7 +53,7 @@ const CreateAuction = () => {
   const [success, setSuccess] = useState('');
 
   // SBU options
-  const sbuOptions = ['SBU1', 'SBU2', 'SBU3', 'SBU4']; // Replace with your actual SBUs
+  const sbuOptions = ['KSPA Paper', 'KSPA Packaging', 'Ethimale', 'KSPA Accessories', 'ATIRE']; 
 
   useEffect(() => {
     const loadBidders = async () => {
@@ -154,7 +154,7 @@ const CreateAuction = () => {
       { field: 'start_time', message: 'Start time is required' },
       { field: 'category', message: 'Category is required' },
       { field: 'sbu', message: 'SBU is required' },
-      { field: 'created_by_name', message: 'Created by name is required' }
+      { field: 'created_by_name', message: 'Created by is required' }
     ];
     
     for (const { field, message } of requiredFields) {

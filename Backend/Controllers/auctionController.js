@@ -155,16 +155,7 @@ const createAuction = async (req, res) => {
       });
     }
 
-    // Validate SBU
-    const allowedSBUs = ['SBU1', 'SBU2', 'SBU3', 'SBU4'];
-    if (!allowedSBUs.includes(sbu)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid SBU value'
-      });
-    }
-
-    // Validate auction date/time is in future (Sri Lanka time)
+        // Validate auction date/time is in future (Sri Lanka time)
     const nowSL = getCurrentSLTime();
     const auctionDateTime = moment.tz(`${auction_date} ${start_time}`, 'YYYY-MM-DD HH:mm:ss', 'Asia/Colombo');
     
