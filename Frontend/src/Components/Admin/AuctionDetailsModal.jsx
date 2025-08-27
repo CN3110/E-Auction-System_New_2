@@ -342,7 +342,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       const result = await response.json();
       
       if (result.success) {
-        alert(`Auction has been cancelled successfully! ${result.biddersNotified} bidders have been notified.`);
+        alert(`Auction has been cancelled successfully! bidders have been notified.`);
         setCancelModal(false);
         setCancelReason("");
         await fetchAuctionDetails();
@@ -806,14 +806,14 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
                                     (r) => r.bidder_id === bidder.bidder_id
                                   )
                                     ? "status-participated"
-                                    : "status-pending"
+                                    : "status-not-participated"
                                 }`}
                               >
                                 {topBidders.some(
                                   (r) => r.bidder_id === bidder.bidder_id
                                 )
                                   ? "PARTICIPATED"
-                                  : "PENDING"}
+                                  : "NOT PARTICIPATED"}
                               </span>
                             </td>
                           </tr>

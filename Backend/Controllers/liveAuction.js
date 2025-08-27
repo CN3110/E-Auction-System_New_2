@@ -590,7 +590,7 @@ const getLiveAuctionDetails = async (req, res) => {
   }
 };
 
-// Get live auction rankings - FIXED reverse auction logic
+// Get live auction rankings - FIXED reverse auction logic with proper tie-breaking
 const getLiveAuctionRankings = async (req, res) => {
   try {
     const { auctionId } = req.params;
@@ -600,26 +600,24 @@ const getLiveAuctionRankings = async (req, res) => {
     console.log('Getting live auction rankings:', { auctionId, userId, userRole });
 
     // 1. Find auction (UUID or auction_id)
-    // 1. Find auction (UUID or auction_id)
-const { data: auctions, error: auctionError } = await query(
-  `SELECT * 
-   FROM auctions 
-   WHERE (id = ? OR auction_id = ?) 
-     AND status IN ('approved','live') 
-   LIMIT 1`,
-  [auctionId, auctionId]
-);
+    const { data: auctions, error: auctionError } = await query(
+      `SELECT * 
+       FROM auctions 
+       WHERE (id = ? OR auction_id = ?) 
+         AND status IN ('approved','live') 
+       LIMIT 1`,
+      [auctionId, auctionId]
+    );
 
-if (auctionError) {
-  console.error('DB error:', auctionError);
-  return res.status(500).json({ success: false, error: 'Database error' });
-}
+    if (auctionError) {
+      console.error('DB error:', auctionError);
+      return res.status(500).json({ success: false, error: 'Database error' });
+    }
 
-const auction = auctions?.[0];
-if (!auction) {
-  return res.status(404).json({ success: false, error: 'Auction not found' });
-}
-
+    const auction = auctions?.[0];
+    if (!auction) {
+      return res.status(404).json({ success: false, error: 'Auction not found' });
+    }
 
     // 2. Check if auction is live
     if (!isAuctionLive(auction)) {
@@ -637,32 +635,34 @@ if (!auction) {
       }
     }
 
-   // 4. Get lowest bid per bidder (reverse auction logic)
-const { data: bidsData, error: bidsError } = await query(
-  `SELECT b.bidder_id, b.amount, b.bid_time,
-          u.user_id, u.name, u.company
-   FROM bids b
-   JOIN users u ON b.bidder_id = u.id
-   INNER JOIN (
-     SELECT bidder_id, MIN(amount) AS min_amount
-     FROM bids
-     WHERE auction_id = ?
-     GROUP BY bidder_id
-   ) lb ON b.bidder_id = lb.bidder_id AND b.amount = lb.min_amount
-   WHERE b.auction_id = ?
-   ORDER BY b.amount ASC, b.bid_time ASC`,
-  [auction.id, auction.id]
-);
+    // 4. Get lowest bid per bidder with proper tie-breaking (earliest bid wins)
+    const { data: bidsData, error: bidsError } = await query(
+      `SELECT b.bidder_id, b.amount, b.bid_time,
+              u.user_id, u.name, u.company
+       FROM bids b
+       JOIN users u ON b.bidder_id = u.id
+       INNER JOIN (
+         -- Get the earliest lowest bid for each bidder
+         SELECT bidder_id, MIN(amount) AS min_amount, MIN(bid_time) as earliest_time
+         FROM bids
+         WHERE auction_id = ?
+         GROUP BY bidder_id
+       ) lb ON b.bidder_id = lb.bidder_id 
+              AND b.amount = lb.min_amount 
+              AND b.bid_time = lb.earliest_time
+       WHERE b.auction_id = ?
+       ORDER BY b.amount ASC, b.bid_time ASC`,
+      [auction.id, auction.id]
+    );
 
-if (bidsError) {
-  console.error('Get rankings error:', bidsError);
-  return res.status(500).json({ success: false, error: 'Failed to fetch rankings' });
-}
+    if (bidsError) {
+      console.error('Get rankings error:', bidsError);
+      return res.status(500).json({ success: false, error: 'Failed to fetch rankings' });
+    }
 
-const allBids = bidsData || [];   // ✅ make sure it's always an array
+    const allBids = bidsData || [];
 
-
-    if (!allBids || allBids.length === 0) {
+    if (allBids.length === 0) {
       return res.json({
         success: true,
         auction_id: auction.auction_id,
@@ -678,8 +678,26 @@ const allBids = bidsData || [];   // ✅ make sure it's always an array
       });
     }
 
-    // 5. Format rankings
-    const rankings = allBids.map((bid, index) => ({
+    // 5. Remove duplicate bidders (in case same bidder has multiple bids at same amount)
+    const uniqueBidders = new Map();
+    allBids.forEach(bid => {
+      if (!uniqueBidders.has(bid.bidder_id)) {
+        uniqueBidders.set(bid.bidder_id, bid);
+      }
+    });
+
+    const uniqueBids = Array.from(uniqueBidders.values())
+      .sort((a, b) => {
+        // First sort by amount (lowest first)
+        if (a.amount !== b.amount) {
+          return a.amount - b.amount;
+        }
+        // Then sort by time (earliest first) for tie-breaking
+        return new Date(a.bid_time) - new Date(b.bid_time);
+      });
+
+    // 6. Format rankings
+    const rankings = uniqueBids.map((bid, index) => ({
       rank: index + 1,
       bidder_id: bid.bidder_id,
       user_id: bid.user_id,
@@ -718,8 +736,6 @@ const allBids = bidsData || [];   // ✅ make sure it's always an array
     });
   }
 };
-
-
 
 
 // Check auction live status
