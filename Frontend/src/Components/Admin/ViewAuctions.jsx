@@ -484,12 +484,13 @@ const ViewAuctions = () => {
                           {isAdmin() && (
                             <>
                               <button
-                                className="btn btn-edit"
-                                onClick={() => handleEditAuction(auction)}
-                                title="Edit Auction"
-                              >
-                                Edit
-                              </button>
+      className={`btn ${(auction.calculated_status || auction.status) === 'ended' ? 'btn-edit-disabled' : 'btn-edit'}`}
+      onClick={(auction.calculated_status || auction.status) === 'ended' ? null : () => handleEditAuction(auction)}
+      disabled={(auction.calculated_status || auction.status) === 'ended'}
+      title={(auction.calculated_status || auction.status) === 'ended' ? 'Cannot edit ended auctions' : 'Edit Auction'}
+    >
+      Edit
+    </button>
                               <button
                                 className="btn btn-delete"
                                 onClick={() => handleDeleteAuction(auction)}
