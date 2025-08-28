@@ -88,7 +88,7 @@ const AuctionHistory = () => {
         const formattedHistory = data.auctionResults.map(item => ({
           auction_id: item["Auction ID"],
           title: item["Title"],
-          bid_amount: item["Bid Amount"],
+          bid_amount: item["Best Bid Amount"],
           result: item["Result"],
           raw_status: item["Raw Status"],
           date_time: item["Date Time"],
@@ -256,7 +256,7 @@ const AuctionHistory = () => {
                   <th>Title</th>
                   <th>Bid Amount</th>
                   <th>Result</th>
-                  <th>Date Time</th>
+                  
                   <th>Details</th>
                 </tr>
               </thead>
@@ -286,24 +286,7 @@ const AuctionHistory = () => {
                         {item.result}
                       </span>
                     </td>
-                    <td>
-                      <small className="text-muted">
-                        {item.date_time || 'Date not available'}
-                      </small>
-                      {item.shortlisted_at && (
-                        <div>
-                          <small className="text-info">
-                            <i className="fas fa-clock me-1"></i>
-                            Shortlisted: {new Date(item.shortlisted_at).toLocaleString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </small>
-                        </div>
-                      )}
-                    </td>
+                    
                     <td>
                       <div className="d-flex flex-column gap-1">
                         {/* Shortlist Notice */}
