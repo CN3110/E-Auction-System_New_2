@@ -157,9 +157,10 @@ const fetchOverallResults = useCallback(async () => {
         title: result["Title"],
         winning_bidder_id: result["Bidder User ID"], // Show the user-friendly ID
         bidder_name: result["Bidder Name"],
-        winning_price: result["Winning Bidding Price"],
-        auction_date: result["Auction Date"],
-        status: result["Award Status"]
+        winning_price: result["Latest Bidding Price"],
+        winning_bidder_company: result["Company"],
+        winning_bidder_email: result["Email"],
+        
       }));
       
       setOverallResults(formattedResults);
@@ -332,7 +333,7 @@ const fetchOverallResults = useCallback(async () => {
                     </div>
                   </div>
 
-                  {/* Auction Stats */}
+                  {/* Auction Stats 
                   <div className="row mb-3">
                     <div className="col-md-3">
                       <div className="text-center p-2 bg-light rounded">
@@ -358,7 +359,7 @@ const fetchOverallResults = useCallback(async () => {
                         <small className="text-muted">Participation</small>
                       </div>
                     </div>
-                  </div>
+                  </div>*/}
 
                   <div className="table-responsive">
                     <table className="table table-bordered table-hover">
@@ -445,9 +446,12 @@ const fetchOverallResults = useCallback(async () => {
                 <tr>
                   <th>Auction ID</th>
                   <th>Title</th>
-                  <th>Winning Bidder ID</th>
+                  <th>Bidder ID</th>
                   <th>Bidder Name</th>
-                  <th>Winning Bidding Price</th>
+                  <th>Awarded Bidding Price</th>
+                  <th>Bidder's Company</th>
+                  <th>Bidder's Email</th>
+
                   
                   
                 </tr>
@@ -475,17 +479,15 @@ const fetchOverallResults = useCallback(async () => {
                           <span className="text-muted">No Bids</span>
                         )}
                       </td>
+                      <td>{result.winning_bidder_company || 'N/A'}</td>
+                      <td>{result.winning_bidder_email || 'N/A'}</td>
                       
                       
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="7" className="text-center text-muted p-4">
-                      <i className="fas fa-chart-line fa-2x mb-2"></i>
-                      <div>No completed auction results available</div>
-                      <small>Results will appear here once auctions are completed</small>
-                    </td>
+                    
                   </tr>
                 )}
               </tbody>

@@ -550,23 +550,37 @@ const getAuctionResultsOverview = async (req, res) => {
   try {
     const result = await db.query(`
       SELECT 
-        a.auction_id AS "Auction ID",
-        a.title AS "Title",
-        u.id AS "Winning Bidder ID",
-        u.name AS "Bidder Name",
-        u.user_id AS "Bidder User ID",
-        u.company AS "Company",
-        (SELECT MIN(amount) FROM bids 
-         WHERE auction_id = a.id AND bidder_id = u.id) AS "Winning Bidding Price",
-        ar.status AS "Award Status",
-        ar.quotation_uploaded_at AS "Quotation Uploaded",
-        a.auction_date AS "Auction Date",
-        a.status AS "Auction Status"
-      FROM auction_results ar
-      INNER JOIN auctions a ON ar.auction_id = a.id
-      INNER JOIN users u ON ar.bidder_id = u.id
-      WHERE ar.status IN ('awarded', 'short-listed')
-      ORDER BY a.auction_date DESC, a.created_at DESC
+    a.auction_id AS "Auction ID",
+    a.title AS "Title",
+    u.id AS "Winning Bidder ID",
+    u.user_id AS "Bidder User ID",
+    u.name AS "Bidder Name",
+    u.company AS "Company",
+    u.email AS "Email",
+    u.phone AS "Phone",
+    latest_bid.amount AS "Latest Bidding Price",
+    ar.status AS "Award Status",
+    ar.quotation_uploaded_at AS "Quotation Uploaded",
+    a.auction_date AS "Auction Date",
+    a.status AS "Auction Status"
+FROM auction_results ar
+INNER JOIN auctions a ON ar.auction_id = a.id
+INNER JOIN users u ON ar.bidder_id = u.id
+INNER JOIN (
+    -- Subquery to get the latest bid amount for each bidder in each auction
+    SELECT b1.auction_id, b1.bidder_id, b1.amount
+    FROM bids b1
+    INNER JOIN (
+        SELECT auction_id, bidder_id, MAX(bid_time) as latest_bid_time
+        FROM bids
+        GROUP BY auction_id, bidder_id
+    ) b2 ON b1.auction_id = b2.auction_id 
+           AND b1.bidder_id = b2.bidder_id 
+           AND b1.bid_time = b2.latest_bid_time
+) latest_bid ON ar.auction_id = latest_bid.auction_id 
+              AND ar.bidder_id = latest_bid.bidder_id
+WHERE ar.status IN ('awarded')
+ORDER BY a.auction_date DESC, a.created_at DESC;
     `);
 
     if (result.error) {

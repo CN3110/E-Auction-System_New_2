@@ -344,7 +344,7 @@ const AuctionHistory = () => {
             </table>
           </div>
 
-          {/* Results Summary */}
+          {/* Results Summary 
           <div className="mt-3">
             <div className="row">
               <div className="col-md-12">
@@ -374,7 +374,7 @@ const AuctionHistory = () => {
                 </div>
               </div>
             </div>
-          </div>
+          </div> */}
 
           <div className="mt-3">
             <div className="row">
