@@ -324,10 +324,11 @@ const ViewAuctions = () => {
               className="filter-select"
             >
               <option value="">All SBUs</option>
-              <option value="SBU1">SBU1</option>
-              <option value="SBU2">SBU2</option>
-              <option value="SBU3">SBU3</option>
-              <option value="SBU4">SBU4</option>
+              <option value="KSPA Paper">KSPA Paper</option>
+              <option value="KSPA Packaging">KSPA Packaging</option>
+              <option value="Ethimale">Ethimale</option>
+              <option value="KSPA Accessories">KSPA Accessories</option>
+              <option value="ATIRE">ATIRE</option>
             </select>
           </div>
 
