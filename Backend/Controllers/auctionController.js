@@ -1108,14 +1108,14 @@ const updateAuction = async (req, res) => {
       });
     }
 
-    // Validate SBU
+    /*Validate SBU
     const allowedSBUs = ["KSPA Paper", "KSPA Packaging", "Ethimale", "KSPA Accessories", "ATIRE"];
     if (!allowedSBUs.includes(sbu)) {
       return res.status(400).json({
         success: false,
         error: "Invalid SBU value",
       });
-    }
+    }*/
 
     // Validate auction date/time is in future
     const nowSL = getCurrentSLTime();

@@ -66,7 +66,7 @@ router.post('/:auctionId/reject', authenticateToken, requireSystemAdmin, rejectA
 router.put('/:auctionId', authenticateToken, requireAdminOrSystemAdmin, updateAuction);
 
 // Delete auction (Admin only)
-router.delete('/:auctionId', authenticateToken, requireAdmin, deleteAuction);
+router.delete('/:auctionId', authenticateToken, requireAdminOrSystemAdmin, deleteAuction);
 
 // Get specific auction details
 router.get('/:auctionId', authenticateToken, getAuction);
