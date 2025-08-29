@@ -1704,18 +1704,6 @@
 }
 
 /* Action Buttons Container */
-.action-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  min-width: 200px;
-}
-
-.action-buttons .btn-small {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.4rem;
-  white-space: nowrap;
-}
 
 /* Status Text Styling */
 .status-text.shortlisted-text {

@@ -441,7 +441,7 @@ const BidRecordsModal = ({ auction, onClose }) => {
           )}
         </div>
 
-        {/* Pagination */}
+        {/* Pagination 
         {totalPages > 1 && (
           <div className="pagination">
             <button
@@ -499,7 +499,7 @@ const BidRecordsModal = ({ auction, onClose }) => {
               Last
             </button>
           </div>
-        )}
+        )} */}
 
         {/* Modal Footer */}
         <div className="modal-footer">

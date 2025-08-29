@@ -1,4 +1,4 @@
-/* BidRecordsModal.css */
+/* BidRecordsModal.css - Fixed Version */
 
 .bid-records-modal {
   width: 95%;
@@ -35,90 +35,7 @@
   font-style: italic;
 }
 
-/* Filters Section */
-.filters-section {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
 
-.filters-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.filters-header h3 {
-  margin: 0;
-  color: #334155;
-  font-size: 16px;
-}
-
-.btn-clear {
-  background: #f1f5f9;
-  border: 1px solid #cbd5e1;
-  color: #475569;
-  padding: 6px 12px;
-  font-size: 12px;
-}
-
-.btn-clear:hover {
-  background: #e2e8f0;
-}
-
-.filters-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 15px;
-}
-
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.filter-group label {
-  font-weight: 500;
-  color: #374151;
-  font-size: 13px;
-}
-
-.filter-group select,
-.filter-group input {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-  background: white;
-}
-
-.filter-group select:focus,
-.filter-group input:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-/* Records Summary */
-.records-summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #f9fafb;
-  padding: 15px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-  border: 1px solid #e5e7eb;
-}
-
-.summary-stats {
-  display: flex;
-  gap: 30px;
-}
 
 .stat-item {
   display: flex;
@@ -171,13 +88,14 @@
   background: #d97706;
 }
 
-/* Table Styles */
+/* Table Styles - Ensure proper flex behavior */
 .table-container {
   flex: 1;
+  min-height: 55vh; /* Important: allows flex item to shrink below content size */
   overflow: auto;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 15px; /* Reduced from 20px */
   background: white;
 }
 
@@ -363,23 +281,26 @@
   line-height: 1.5;
 }
 
-/* Pagination */
+/* Pagination - FIXED: More compact layout */
 .pagination {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 5px;
-  margin-bottom: 20px;
+  gap: 8px;
+  padding: 10px 0;
+  flex-shrink: 0; /* Prevent pagination from shrinking */
+  margin-bottom: 0; /* Remove bottom margin */
 }
 
 .btn-pagination {
-  padding: 8px 12px;
+  padding: 6px 10px; /* Reduced padding */
   border: 1px solid #d1d5db;
   background: white;
   color: #374151;
   border-radius: 6px;
-  font-size: 14px;
-  min-width: 44px;
+  font-size: 13px; /* Reduced font size */
+  min-width: 36px; /* Reduced min-width */
+  height: 32px; /* Fixed height */
 }
 
 .btn-pagination:hover:not(:disabled) {
@@ -399,8 +320,8 @@
 
 .page-numbers {
   display: flex;
-  gap: 2px;
-  margin: 0 10px;
+  gap: 4px; /* Reduced gap */
+  margin: 0 8px; /* Reduced margin */
 }
 
 /* Responsive Design */
@@ -424,7 +345,7 @@
   }
   
   .filters-section {
-    padding: 15px;
+    padding: 12px; /* Further reduced */
   }
   
   .filters-grid {
@@ -434,13 +355,14 @@
   
   .records-summary {
     flex-direction: column;
-    gap: 15px;
+    gap: 12px; /* Reduced */
     align-items: stretch;
+    padding: 10px 12px; /* Reduced */
   }
   
   .summary-stats {
     flex-direction: column;
-    gap: 10px;
+    gap: 8px; /* Reduced */
   }
   
   .action-buttons {
@@ -462,16 +384,7 @@
     display: none;
   }
   
-  .pagination {
-    flex-wrap: wrap;
-    gap: 3px;
-  }
-  
-  .btn-pagination {
-    padding: 6px 10px;
-    font-size: 12px;
-    min-width: 36px;
-  }
+
 }
 
 @media (max-width: 480px) {
