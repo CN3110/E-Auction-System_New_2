@@ -89,20 +89,38 @@ const registerBidder = async (req, res) => {
     // Send email with credentials (wrapped in try-catch)
     try {
       const emailHTML = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Welcome to E-Auction System</h2>
-          <p>Dear ${name},</p>
-          <p>Your bidder account has been created successfully for <strong>${company}</strong>.</p>
-          
-          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
-            <h3 style="margin-top: 0;">Your Login Credentials:</h3>
-            <p><strong>User ID:</strong> ${bidderId}</p>
-            <p><strong>Password:</strong> ${password}</p>
-          </div>
-          
-          <p>Thank you for joining our auction platform!</p>
-        </div>
-      `;
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+  <h2 style="color: #333;">Welcome to ProcuBid E-Auction System</h2>
+  <p>Dear ${name},</p>
+  <p>Your bidder account has been successfully created for <strong>${company}</strong>.</p>
+  
+  <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+    <h3 style="margin-top: 0;">Your Login Credentials:</h3>
+    <p><strong>User ID:</strong> ${bidderId}</p>
+    <p><strong>Password:</strong> ${password}</p>
+  </div>
+  
+  <p>You can access the auction system at: 
+    <a href="https://procubid.anunine.com/" target="_blank">https://procubid.anunine.com/</a>
+  </p>
+  
+  <p><strong>🔑 Password Note:</strong><br>
+  After logging in for the first time, you may create your own password through the system.  
+  If you choose not to update, the above auto-generated password will remain valid.</p>
+  
+  <p>Thank you for joining our auction platform. We look forward to your active participation in upcoming auctions.</p>
+  
+  <br>
+  <p>Best regards,<br>
+  <strong>ProcuBid E-Auction System Team</strong></p>
+  
+  <hr style="margin: 20px 0;">
+  <p style="font-size: 12px; color: #666;">
+    This is an automated message. Please do not reply to this email.
+  </p>
+</div>
+`;
+
       
       console.log('Attempting to send email to:', email);
       await sendEmail(email, 'E-Auction Account Created - Login Credentials', emailHTML);

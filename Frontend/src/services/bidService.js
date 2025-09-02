@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const API_URL = 'http://localhost:5000/api';
+//const API_URL = 'https://procubid.anunine.com/api'
 
 // Set up axios defaults
 axios.interceptors.request.use(config => {
@@ -15,7 +16,7 @@ axios.interceptors.request.use(config => {
 //get live auctions for invited bidders
 export const getLiveAuctionsForBidder = async () => {
   try {
-    const response = await axios.get(`http://localhost:5000/api/auction/live/bidder`);
+    const response = await axios.get(`${API_URL}/auction/live/bidder`);
     return response.data.auction;
   } catch (error) {
     console.error('Error fetching live auction:', error);
@@ -25,7 +26,7 @@ export const getLiveAuctionsForBidder = async () => {
 
 export const placeBid = async (auctionId, amount) => {
   try {
-    const response = await axios.post(`${API_URL}/auctions/${auctionId}/bids`, { amount });
+    const response = await axios.post(`${API_URL}/auction/${auctionId}/bids`, { amount });
     return response.data;
   } catch (error) {
     console.error('Error placing bid:', error);
@@ -35,7 +36,7 @@ export const placeBid = async (auctionId, amount) => {
 
 export const getBidderRank = async (auctionId) => {
   try {
-    const response = await axios.get(`${API_URL}/auctions/${auctionId}/rankings`);
+    const response = await axios.get(`${API_URL}/auction/${auctionId}/rankings`);
     return response.data.rankings.find(rank => rank.bidder_id === localStorage.getItem('userId'));
   } catch (error) {
     console.error('Error fetching bidder rank:', error);
@@ -45,7 +46,7 @@ export const getBidderRank = async (auctionId) => {
 
 export const getMinBidAmount = async (auctionId) => {
   try {
-    const response = await axios.get(`${API_URL}/auctions/${auctionId}/min-bid`);
+    const response = await axios.get(`${API_URL}/auction/${auctionId}/min-bid`);
     return response.data.minBid;
   } catch (error) {
     console.error('Error fetching min bid amount:', error);

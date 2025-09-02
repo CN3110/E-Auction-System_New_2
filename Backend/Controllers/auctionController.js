@@ -805,48 +805,47 @@ const approveAuction = async (req, res) => {
           const displayDateTime = `${formattedDate} @${formattedTime}`;
 
           // ✅ Email Body (Auction Invitation)
-          const emailPromises = bidders.map(async (bidder) => {
-            const emailHTML = `
-    <h2>📢 Official Auction Invitation - E-Auction System</h2>
-    <p>Dear ${bidder.name},</p>
-    <p>We are pleased to invite you to participate in the following <strong>E-Auction</strong>, which has been <span style="color: #28a745; font-weight: bold;">APPROVED</span> and scheduled for bidding:</p>
-    
-    <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #007bff; margin: 20px 0;">
-      <p><strong>📋 Title:</strong> ${auctionData.title}</p>
-      <p><strong>🏷️ Category:</strong> ${auctionData.category}</p>
-      <p><strong>🏢 SBU:</strong> ${auctionData.sbu}</p>
-      <p><strong>📅 Date & Time:</strong> ${displayDateTime}</p>
-      <p><strong>⏱️ Duration:</strong> ${
-        auctionData.duration_minutes
-      } minutes</p>
-      ${
-        auctionData.special_notices
-          ? `<p><strong>📝 Special Notices:</strong> ${auctionData.special_notices}</p>`
-          : ""
-      }
-    </div>
-    
-    <p>You may access the auction system at: <a href="https://procubid.anunine.com/" target="_blank">https://procubid.anunine.com/</a></p>
-    
-    <div style="background-color: #e8f5e8; padding: 15px; border-radius: 5px; margin: 20px 0;">
-      <p><strong>🚀 Next Steps:</strong></p>
-      <ul>
-        <li>Login to your account well before the scheduled time.</li>
-        <li>Ensure you are prepared to participate once the auction goes live.</li>
-        <li>Remember: This is a <strong>reverse auction</strong> — the lowest bid wins!</li>
-      </ul>
-    </div>
-    
-    <p>We look forward to your active participation.</p>
-    <br>
-    <p>Best regards,<br>
-    <strong>E-Auction System Team</strong></p>
-    
-    <hr style="margin: 20px 0;">
-    <p style="font-size: 12px; color: #666;">
-      This is an automated invitation. Please do not reply to this email.
-    </p>
-            `;
+const emailPromises = bidders.map(async (bidder) => {
+  const emailHTML = `
+<h2>Auction Invitation - ProcuBid E-Auction System</h2>
+<p>Dear ${bidder.name},</p>
+<p>We are pleased to invite you to participate in the following <strong>E-Auction</strong>, which has been scheduled for bidding:</p>
+
+<div style="background-color: #fafaf8ff; padding: 15px; border-left: 4px solid #c8c8c8ff; margin: 20px 0;">
+  <p><strong>📋 Title:</strong> ${auctionData.title}</p>
+  <p><strong>🏷️ Category:</strong> ${auctionData.category}</p>
+  <p><strong>🏢 SBU:</strong> ${auctionData.sbu}</p>
+  <p><strong>📅 Date & Time:</strong> ${displayDateTime}</p>
+  <p><strong>⏱️ Duration:</strong> ${auctionData.duration_minutes} minutes</p>
+  ${
+    auctionData.special_notices
+      ? `<p><strong>📝 Special Notices:</strong> ${auctionData.special_notices}</p>`
+      : ""
+  }
+</div>
+
+<p>You may access the auction system at: <a href="https://procubid.anunine.com/" target="_blank">https://procubid.anunine.com/</a></p>
+
+<div style="background-color: #fdffe9ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
+  <p><strong>🚀 Next Steps:</strong></p>
+  <ul>
+    <li>Login to your account well before the scheduled time.</li>
+    <li>Ensure you are prepared to participate once the auction goes live.</li>
+    <li>If the auction is not displayed when the scheduled time arrives, please refresh your browser.</li>
+    <li>Remember: This is a <strong>reverse auction</strong> — the lowest bid wins!</li>
+  </ul>
+</div>
+
+<p>We look forward to your active participation.</p>
+<br>
+<p>Best regards,<br>
+<strong>ProcuBid E-Auction System Team</strong></p>
+
+<hr style="margin: 20px 0;">
+<p style="font-size: 12px; color: #666;">
+  This is an automated invitation. Please do not reply to this email.
+</p>
+  `;
 
             try {
               await sendEmail(

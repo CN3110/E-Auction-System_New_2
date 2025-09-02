@@ -7,6 +7,9 @@ import {
 import BidRecordsModal from "./BidRecordsModal";
 import "../../styles/AuctionDetailsModal.css";
 
+const API_URL = 'http://localhost:5000/api';
+//const API_URL = 'https://procubid.anunine.com/api'
+
 const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
   // State management
   const [auctionDetails, setAuctionDetails] = useState(null);
@@ -115,7 +118,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       console.log("Fetching top bidders for:", identifier);
 
-      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/top-bidders`, {
+      const response = await fetch(`${API_URL}/auction/${identifier}/top-bidders`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json',
@@ -156,7 +159,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       setActionLoading(true);
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       
-      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/shortlist`, {
+      const response = await fetch(`${API_URL}/auction/${identifier}/shortlist`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -198,7 +201,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       
       console.log('Awarding bidder:', bidderId, 'for auction:', identifier);
       
-      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/award/${bidderId}`, {
+      const response = await fetch(`${API_URL}/auction/${identifier}/award/${bidderId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -238,7 +241,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       setAwardActionLoading(prev => ({ ...prev, [bidderId]: true }));
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       
-      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/not-award/${bidderId}`, {
+      const response = await fetch(`${API_URL}/auction/${identifier}/not-award/${bidderId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -281,7 +284,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       setActionLoading(true);
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       
-      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/disqualify/${selectedBidder.bidder_id}`, {
+      const response = await fetch(`${API_URL}/auction/${identifier}/disqualify/${selectedBidder.bidder_id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -326,7 +329,7 @@ const AuctionDetailsModal = ({ auction, onClose, currentUser }) => {
       setActionLoading(true);
       const identifier = auction.auction_id || auction.id || auction.AuctionID;
       
-      const response = await fetch(`http://localhost:5000/api/auction/${identifier}/cancel`, {
+      const response = await fetch(`${API_URL}/auction/${identifier}/cancel`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,

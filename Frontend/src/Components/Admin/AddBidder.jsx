@@ -164,7 +164,7 @@ const AddBidder = () => {
                   <p className="bidder-company">{bidder.company}</p>
                   <p className="bidder-contact">
                     <span>{bidder.email}</span>
-                    {bidder.phone && <span> | {bidder.phone}</span>}
+                    
                   </p>
                   <p className="bidder-status">
                     Status:{' '}

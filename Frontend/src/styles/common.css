@@ -19,9 +19,9 @@
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: linear-gradient(135deg, var(--primary-light), var(--primary-dark));
+  background: #fffbfb;
   min-height: 100vh;
-  color: #333;
+  color: #000000;
 }
 
 .container {
@@ -59,7 +59,7 @@ body {
 
 .nav-tab {
   padding: 12px 24px;
-  background: #ffd163;
+  background: #fffaee;
   border: none;
   border-radius: 25px;
   cursor: pointer;
@@ -69,14 +69,15 @@ body {
 }
 
 .nav-tab.active {
-  background: linear-gradient(135deg, #e5b14c, #daae57);
+  background: linear-gradient(135deg, #dec492, #dcbb79);
   color: white;
-  transform: translateY(-2px);
+  
+  
   box-shadow: 0 5px 15px rgba(152, 164, 72, 0.4);
 }
 
 .nav-tab:hover {
-  transform: translateY(-1px);
+
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
 }
 
@@ -121,8 +122,9 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #daae57);
-  color: var(--white);
+  background: linear-gradient(135deg, #e5b14c);
+  color: var(--neutral-dark);
+  text-decoration-color: #1a150b;
 }
 
 .btn-primary:hover {

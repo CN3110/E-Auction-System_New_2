@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Card from '../Common/Card';
 import Alert from '../Common/Alert';
 
+const API_URL = 'http://localhost:5000/api';
+//const API_URL = 'https://procubid.anunine.com/api'
+
 const LiveRankings = () => {
   const [activeTab, setActiveTab] = useState('liveRankings');
   const [liveAuctions, setLiveAuctions] = useState([]);
@@ -57,7 +60,7 @@ const LiveRankings = () => {
     try {
       const token = localStorage.getItem('token');
       // FIXED: Correct API endpoint path
-      const response = await fetch('http://localhost:5000/api/auction/live/admin', {
+      const response = await fetch(`${API_URL}/auction/live/admin`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -105,7 +108,7 @@ const LiveRankings = () => {
     try {
       const token = localStorage.getItem('token');
       // FIXED: Correct API endpoint path
-      const response = await fetch(`http://localhost:5000/api/auction/live/${auctionId}/rankings`, {
+      const response = await fetch(`${API_URL}/auction/live/${auctionId}/rankings`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -136,7 +139,7 @@ const fetchOverallResults = useCallback(async () => {
   try {
     const token = localStorage.getItem('token');
     
-    const response = await fetch('http://localhost:5000/api/auction/results/overview', {
+    const response = await fetch(`${API_URL}/auction/results/overview`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

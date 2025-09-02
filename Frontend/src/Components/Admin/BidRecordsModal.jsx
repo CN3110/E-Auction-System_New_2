@@ -3,6 +3,9 @@ import "../../styles/BidRecordsModal.css";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 
+const API_URL = 'http://localhost:5000/api';
+
+
 const BidRecordsModal = ({ auction, onClose }) => {
   const [bidRecords, setBidRecords] = useState([]);
   const [filteredBids, setFilteredBids] = useState([]);
@@ -45,7 +48,7 @@ const BidRecordsModal = ({ auction, onClose }) => {
       const auctionId = auction.auction_id || auction.id || auction.AuctionID;
       console.log('Fetching bid records for auction:', auctionId);
 
-      const response = await fetch(`http://localhost:5000/api/auction/${auctionId}/all-bids`, {
+      const response = await fetch(`${API_URL}/auction/${auctionId}/all-bids`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,

@@ -420,7 +420,7 @@ const LiveAuction = () => {
           <strong>{currentTimeSL}</strong>
         </div>
         <Alert 
-          message="Currently there are no live auctions available to you. Please check back later."
+          message="Currently there are no live auctions available to you. Please check back later. when the auction start"
           type="info"
         />
         <button 
@@ -428,7 +428,7 @@ const LiveAuction = () => {
           onClick={() => fetchAuctionData()}
           disabled={loading}
         >
-          {loading ? 'Refreshing...' : 'Refresh'}
+          {/*{loading ? 'Refreshing...' : 'Refresh'}*/}
         </button>
       </div>
     );
