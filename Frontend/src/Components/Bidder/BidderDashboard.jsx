@@ -23,9 +23,7 @@ const BidderDashboard = () => {
       <div className="bidder-dashboard">
         <div className="dashboard-header">
           <NavTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
-          <button onClick={logout} className="logout-btn">
-            Logout
-          </button>
+          
         </div>
         
         <br />

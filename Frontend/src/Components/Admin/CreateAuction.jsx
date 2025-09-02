@@ -441,15 +441,16 @@ const CreateAuction = () => {
           </div>
 
           <div className="text-center">
-            <Button 
-              variant="contained" 
-              color="warning" 
-              type="submit"
-              disabled={loading}
-              startIcon={loading ? <CircularProgress size={20} /> : null}
-            >
-              {loading ? 'Creating Auction...' : 'Create Auction'}
-            </Button>
+            <Button
+  variant="contained"
+  type="submit"
+  className="custom-auction-btn"
+  disabled={loading}
+  startIcon={loading ? <CircularProgress size={20} /> : null}
+>
+  {loading ? 'Creating Auction...' : 'Create Auction'}
+</Button>
+
           </div>
         </form>
       </Card>

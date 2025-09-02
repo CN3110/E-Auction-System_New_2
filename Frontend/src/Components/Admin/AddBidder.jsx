@@ -142,7 +142,7 @@ const AddBidder = () => {
           />
         </div>
         <div className="form-group flex justify-center">
-          <button type="submit" className="btn btn-primary" disabled={isLoading}>
+          <button type="submit" className="primary button" disabled={isLoading}>
             {isLoading ? 'Adding...' : 'Add Bidder'}
           </button>
         </div>

@@ -6,7 +6,6 @@ import ViewAuctions from './ViewAuctions';
 import LiveRankings from './LiveRankings';
 import '../../styles/admin.css';
 import Footer from '../Common/Footer';
-import { logout } from '../../services/authService'; // Import from authService
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('viewAuctions');
@@ -23,9 +22,7 @@ const AdminDashboard = () => {
       <div className="admin-dashboard">
         <div className="dashboard-header">
           <NavTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
-          <button onClick={logout} className="logout-btn">
-            Logout
-          </button>
+          
         </div>
         
         <div className="tab-content">

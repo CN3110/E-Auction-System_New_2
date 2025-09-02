@@ -4,124 +4,293 @@
   padding: 20px;
 }
 
-.tab-content {
-  margin-top: 20px;
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  background: var(--white);
+  border: 1px solid var(--neutral-border);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-light);
+  margin-bottom: 24px;
 }
 
+.tab-content {
+  margin-top: 0;
+}
+
+/* Rankings and Live Data */
 .ranking-table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 20px;
+  background: var(--white);
+  border-radius: var(--border-radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-light);
 }
 
 .ranking-table th,
 .ranking-table td {
-  padding: 12px;
+  padding: 12px 16px;
   text-align: left;
-  border-bottom: 1px solid #e1e8ed;
+  border-bottom: 1px solid var(--neutral-border);
 }
 
 .ranking-table th {
-  background: #f8f9fa;
+  background: var(--neutral-bg);
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.ranking-table tr:hover {
-  background: #f8f9fa;
+.ranking-table tbody tr:hover {
+  background: rgba(52, 152, 219, 0.02);
 }
 
+.ranking-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Timer Display */
 .timer {
-  font-size: 2rem;
+  font-size: 2.5rem;
   font-weight: 700;
-  color: #667eea;
+  color: var(--primary);
   text-align: center;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 12px;
+  padding: 24px;
+  background: var(--white);
+  border: 2px solid var(--neutral-border);
+  border-radius: var(--border-radius-lg);
   margin: 20px 0;
+  box-shadow: var(--shadow-light);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
-
+/* Bidder Management */
 .bidder-list {
-  background: #f8f9fa;
-  padding: 20px;
-  border-radius: 8px;
-  margin-top: 20px;
+  background: var(--white);
+  border: 1px solid var(--neutral-border);
+  border-radius: var(--border-radius-lg);
+  padding: 24px;
+  margin-top: 24px;
+  box-shadow: var(--shadow-light);
+}
+
+.bidder-list h4 {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--neutral-border);
 }
 
 .bidder-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px;
-  margin-bottom: 10px;
-  background: white;
-  border-radius: 6px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  padding: 16px;
+  margin-bottom: 12px;
+  background: var(--neutral-bg);
+  border: 1px solid var(--neutral-border);
+  border-radius: var(--border-radius);
+  transition: all 0.2s ease;
+}
+
+.bidder-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-medium);
+  border-color: var(--secondary);
+}
+
+.bidder-item:last-child {
+  margin-bottom: 0;
 }
 
 .bidder-info h5 {
-  margin: 0 0 5px 0;
-  color: #333;
+  margin: 0 0 4px 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .bidder-id {
-  color: #666;
-  font-size: 0.9em;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .bidder-company {
-  margin: 0 0 5px 0;
-  color: #444;
-  font-size: 0.9em;
+  margin: 4px 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .bidder-contact {
   margin: 0;
-  color: #666;
-  font-size: 0.85em;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .bidder-contact span {
   display: inline-block;
-  margin-right: 10px;
+  margin-right: 16px;
 }
 
+.bidder-status {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+}
+
+.bidder-status .active {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.bidder-status .inactive {
+  color: var(--error);
+  font-weight: 600;
+}
+
+/* Action Buttons */
 .remove-btn {
   padding: 8px 16px;
-  background-color: #6f5d5d;
-  color: white;
+  background: var(--error);
+  color: var(--white);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--border-radius);
   cursor: pointer;
-  font-size: 0.9em;
-  transition: background-color 0.2s;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .remove-btn:hover {
-  background-color: #b58080;
+  background: #c0392b;
+  transform: translateY(-1px);
 }
 
-.dashboard-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-  background-color: #f8f9fa;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.logout-btn {
-  padding: 0.5rem 1rem;
-  background-color: #dc3545;
-  color: white;
+.reactivate-btn {
+  padding: 8px 16px;
+  background: var(--success);
+  color: var(--white);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--border-radius);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.logout-btn:hover {
-  background-color: #c82333;
+.reactivate-btn:hover {
+  background: #229954;
+  transform: translateY(-1px);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+button:disabled:hover {
+  transform: none !important;
+}
+
+/* Loading and Error States */
+.loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.error {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--error);
+  font-size: 16px;
+  background: rgba(231, 76, 60, 0.05);
+  border: 1px solid rgba(231, 76, 60, 0.1);
+  border-radius: var(--border-radius);
+}
+
+/* Live Rankings Specific */
+.live-rankings .nav-tabs {
+  border-bottom: 1px solid var(--neutral-border);
+  margin-bottom: 24px;
+}
+
+.live-rankings .nav-link {
+  padding: 12px 20px;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.live-rankings .nav-link.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  background: rgba(44, 62, 80, 0.02);
+}
+
+.live-rankings .nav-link:hover:not(.active) {
+  color: var(--text-primary);
+  background: var(--neutral-bg);
+}
+
+/* Status Badges */
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .dashboard-header {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+  }
+
+  .bidder-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .timer {
+    font-size: 2rem;
+    padding: 20px;
+  }
+
+  .ranking-table {
+    font-size: 14px;
+  }
+
+  .ranking-table th,
+  .ranking-table td {
+    padding: 8px 12px;
+  }
 }

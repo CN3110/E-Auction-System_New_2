@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Card from '../Common/Card';
 import Alert from '../Common/Alert';
+import '../../styles/liveRankings.css';
 
 const API_URL = 'http://localhost:5000/api';
 //const API_URL = 'https://procubid.anunine.com/api'

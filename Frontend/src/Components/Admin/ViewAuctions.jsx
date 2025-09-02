@@ -5,6 +5,31 @@ import AuctionDetailsModal from './AuctionDetailsModal';
 import EditAuctionModal from './EditAuctionModal';
 import '../../styles/viewAuctions.css';
 
+// Icon components
+const ViewIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+);
+
+const EditIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+);
+
+const DeleteIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 6h18"/>
+    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+    <line x1="10" x2="10" y1="11" y2="17"/>
+    <line x1="14" x2="14" y1="11" y2="17"/>
+  </svg>
+);
+
 const ViewAuctions = () => {
   //current user state
   const [currentUser, setCurrentUser] = useState(null);
@@ -256,8 +281,6 @@ const ViewAuctions = () => {
     }
   };
 
- 
-
   // Pagination logic
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -274,10 +297,7 @@ const ViewAuctions = () => {
       <div className="view-auctions-header">
         <h2>
           View Auctions
-         
         </h2>
-        
-        
       </div>
 
       {/* Filter Section */}
@@ -437,8 +457,6 @@ const ViewAuctions = () => {
                 </tr>
               ) : (
                 currentItems.map((auction) => {
-                  //const dateTime = formatDateTime(auction.DateTime || `${auction.auction_date} ${auction.start_time}`);
-                  
                   return (
                     <tr key={auction.AuctionID || auction.id}>
                       <td className="auction-id">{auction.auction_id}</td>
@@ -446,25 +464,25 @@ const ViewAuctions = () => {
                       <td>{auction.category}</td>
                       <td>{auction.sbu}</td>
                       {/* Format Auction Date */}
-    <td>
-      {auction.auction_date
-        ? new Date(auction.auction_date).toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short", // e.g. Aug
-            day: "numeric",
-          })
-        : ""}
-    </td>
+                      <td>
+                        {auction.auction_date
+                          ? new Date(auction.auction_date).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "short", // e.g. Aug
+                              day: "numeric",
+                            })
+                          : ""}
+                      </td>
 
                       {/* Format Start Time */}
-    <td>
-      {auction.start_time
-        ? new Date(`1970-01-01T${auction.start_time}`).toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : ""}
-    </td>
+                      <td>
+                        {auction.start_time
+                          ? new Date(`1970-01-01T${auction.start_time}`).toLocaleTimeString("en-US", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : ""}
+                      </td>
                       <td>{auction.Duration || `${auction.duration_minutes} min`}</td>
                       <td>
                         <span className={getStatusBadgeClass(auction.calculated_status || auction.status)}>
@@ -474,29 +492,29 @@ const ViewAuctions = () => {
                       <td className="actions-cell">
                         <div className="actions-buttons">
                           <button
-                            className="btn btn-view"
+                            className="btn btn-icon btn-view"
                             onClick={() => handleViewAuction(auction)}
                             title="View Details"
                           >
-                            View
+                            <ViewIcon />
                           </button>
                           
                           {isAdmin() && (
                             <>
                               <button
-  className={`btn ${(auction.calculated_status || auction.status) === 'pending' ? 'btn-edit' : 'btn-edit-disabled'}`}
-  onClick={(auction.calculated_status || auction.status) === 'pending' ? () => handleEditAuction(auction) : null}
-  disabled={(auction.calculated_status || auction.status) !== 'pending'}
-  title={(auction.calculated_status || auction.status) === 'pending' ? 'Edit Auction' : 'Can only edit pending auctions'}
->
-  Edit
-</button>
+                                className={`btn btn-icon ${(auction.calculated_status || auction.status) === 'pending' ? 'btn-edit' : 'btn-edit-disabled'}`}
+                                onClick={(auction.calculated_status || auction.status) === 'pending' ? () => handleEditAuction(auction) : null}
+                                disabled={(auction.calculated_status || auction.status) !== 'pending'}
+                                title={(auction.calculated_status || auction.status) === 'pending' ? 'Edit Auction' : 'Can only edit pending auctions'}
+                              >
+                                <EditIcon />
+                              </button>
                               <button
-                                className="btn btn-delete"
+                                className="btn btn-icon btn-delete"
                                 onClick={() => handleDeleteAuction(auction)}
                                 title="Delete Auction"
                               >
-                                Delete
+                                <DeleteIcon />
                               </button>
                             </>
                           )}

@@ -177,23 +177,7 @@ const AuctionHistory = () => {
             </small>
           )}
         </div>
-        <button 
-          className="btn btn-outline-primary btn-sm" 
-          onClick={handleRefresh}
-          disabled={loading}
-        >
-          {loading ? (
-            <>
-              <span className="spinner-border spinner-border-sm me-1" role="status"></span>
-              Refreshing...
-            </>
-          ) : (
-            <>
-              <i className="fas fa-sync-alt me-1"></i>
-              Refresh
-            </>
-          )}
-        </button>
+       
       </div>
 
       {history.length === 0 ? (
