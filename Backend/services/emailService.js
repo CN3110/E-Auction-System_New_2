@@ -15,12 +15,10 @@ const transporter = nodemailer.createTransport({
 // Email templates
 const emailTemplates = {
   shortlist: {
-    subject: '🎉 Congratulations! You\'ve been shortlisted for {auctionId}',
+    subject: 'Shortlisted for Auction {auctionId}',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: #4CAF50; color: white; padding: 20px; text-align: center;">
-          <h1>🎉 Congratulations!</h1>
-        </div>
+       
         <div style="padding: 20px; background-color: #f9f9f9;">
           <p>Dear {bidderName},</p>
           
@@ -37,9 +35,20 @@ const emailTemplates = {
             <li>Please prepare your detailed quotation</li>
             <li>Include all product specifications and terms</li>
             <li>Submit any additional documentation as required</li>
-            <li>Our team will contact you with further instructions</li>
+            <li>Reply to this email with the required documents.</li>
+            <li>Our team will review and contact you with further communications.</li>
           </ul>
           
+          <h3>Required Documents:</h3>
+          <ul>
+          <li>Company Profile or Registration Documents</li>
+          <li>Final Quotation with complete pricing</li>
+          <li>Technical Data Sheet / Product Specifications (if applicable)</li>
+          <li>Delivery Terms (lead time, delivery schedule, shipping method)</li>
+          <li>Payment Terms (credit period, advance, etc.)</li>
+          <li>Warranty or Quality Certificates (if applicable)</li>
+          <li>Any additional product offerings or alternatives (optional)</li>
+          </ul>
           <p>This is an important step forward in the auction process. Please ensure all required documents are ready for submission.</p>
           
           <p>Best regards,<br>
@@ -56,25 +65,23 @@ const emailTemplates = {
     subject: 'Auction Update: Disqualification Notice for {auctionId}',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: #f44336; color: white; padding: 20px; text-align: center;">
-          <h1>⚠️ Disqualification Notice</h1>
-        </div>
+        <div style="background-color: #c8c653ff; color: white; padding: 20px; text-align: center;"></div>
         <div style="padding: 20px; background-color: #f9f9f9;">
           <p>Dear {bidderName},</p>
           
           <p>We regret to inform you that you have been disqualified from the auction:</p>
           
-          <div style="background-color: white; padding: 15px; border-left: 4px solid #f44336; margin: 15px 0;">
+          <div style="background-color: white; padding: 15px; border-left: 4px solid #c8c653ff; margin: 15px 0;">
             <p><strong>Auction ID:</strong> {auctionId}</p>
             <p><strong>Title:</strong> {auctionTitle}</p>
           </div>
           
-          <div style="background-color: #ffebee; padding: 15px; border: 1px solid #f44336; margin: 15px 0;">
-            <h4 style="margin-top: 0; color: #f44336;">Reason for Disqualification:</h4>
+          <div style="background-color: #ffebee; padding: 15px; border: 1px solid #c8c653ff; margin: 15px 0;">
+            <h4 style="margin-top: 0; color: #c8c653ff;">Reason for Disqualification:</h4>
             <p>{reason}</p>
           </div>
           
-          <p>If you have any questions or believe this decision was made in error, please contact our support team.</p>
+          <p>If you have any questions or believe this decision was made in error, please contact our support team immediately.</p>
           
           <p>Thank you for your participation.</p>
           
@@ -93,7 +100,7 @@ const emailTemplates = {
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #ff9800; color: white; padding: 20px; text-align: center;">
-          <h1>🚫 Auction Cancelled</h1>
+         
         </div>
         <div style="padding: 20px; background-color: #f9f9f9;">
           <p>Dear {bidderName},</p>
@@ -110,9 +117,9 @@ const emailTemplates = {
             <p>{reason}</p>
           </div>
           
-          <p>All bids for this auction are now void. If you have any questions, please contact our support team.</p>
+          <p>All bids for this auction are now void. We sincerely apologize for any inconvenience this may have caused, especially considering the time and effort you invested in participating.</p>
           
-          <p>We apologize for any inconvenience caused and thank you for your understanding.</p>
+          <p>Please rest assured, we will contact you again when we have future requirements, and we truly value your continued participation in our auctions.</p>
           
           <p>Best regards,<br>
           E-Auction System Team</p>
@@ -137,18 +144,18 @@ const emailTemplates = {
           
           <p>We are delighted to inform you that you have been <strong>awarded</strong> the auction:</p>
           
-          <div style="background-color: white; padding: 15px; border-left: 4px solid #4CAF50; margin: 15px 0;">
+          <div style="background-color: white; padding: 15px; border-left: 4px solid #c8c653ff; margin: 15px 0;">
             <p><strong>Auction ID:</strong> {auctionId}</p>
             <p><strong>Title:</strong> {auctionTitle}</p>
           </div>
           
-          <div style="background-color: #e8f5e8; padding: 15px; border: 1px solid #4CAF50; margin: 15px 0;">
-            <h4 style="margin-top: 0; color: #4CAF50;">Next Steps:</h4>
+          <div style="background-color: #e8f5e8; padding: 15px; border: 1px solid #c8c653ff; margin: 15px 0;">
+            <h4 style="margin-top: 0; color: #c8c653ff;">Next Steps:</h4>
             <ul>
-              <li>Our procurement team will contact you within 2 business days</li>
-              <li>Please prepare all necessary documentation</li>
-              <li>Contract finalization will begin shortly</li>
-              <li>Ensure you have all required licenses and certifications ready</li>
+              <li>Our procurement team will contact you as soon as possible.</li>
+              <li>Please make sure to respond promptly when they reach out. Alternatively, you may also contact us using this email if needed.</li>
+              <li>Contract finalization will begin shortly thereafter.</li>
+              
             </ul>
           </div>
           
